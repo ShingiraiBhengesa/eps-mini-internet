@@ -20,7 +20,9 @@ Packets are JSON objects serialized as UTF-8 bytes.
 | `message_id` | Identifier for a message and its related logs |
 | `payload` | Application payload |
 
-Serialized packets must not exceed 1,200 bytes. Malformed packets, invalid fields, and oversized packets are rejected.
+Message types are `PROBE`, `ECHO`, `DATA`, and `ACK`. Addresses are at most 32 characters and `message_id` at most 64.
+
+Serialized packets must not exceed 1,200 bytes. `decode_packet` raises `PacketError` for packets that are empty, oversized, not UTF-8 JSON objects, have missing, extra, or duplicate fields, or have fields of the wrong type or out of range.
 
 ## Module Interfaces
 
