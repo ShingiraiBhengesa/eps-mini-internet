@@ -32,7 +32,33 @@ Serialized packets must not exceed 1,200 bytes. Malformed packets, invalid field
 
 ## Configuration
 
-`config/topology.json` defines device virtual addresses, UDP endpoints, and configured neighbors. The development configuration contains Host 1 and Router A. The final topology must include two hosts and four routers.
+`config/topology.json` defines the topology: two hosts and four routers.
+
+```
+          +-- routerB --+
+host1 -- routerA        routerD -- host2
+          +-- routerC --+
+```
+
+| Section | Contents |
+|---|---|
+| `devices.<name>` | `virtual_address` (must equal the name), `role` (`host` or `router`), `udp_host`, `udp_port`, `neighbors` |
+| host only | `gateway`: the host's single neighbor; every outgoing packet goes there |
+| router only | `forwarding_table`: maps a destination address to a next-hop neighbor |
+| `links[]` | `endpoints` (two neighbors), `loss` (0 to 1), `delay_ms` (>= 0) for loss and delay injection |
+| `paths` | `forward` (host1 to host2) and `return` (host2 to host1) device lists |
+
+Forward traffic goes through routerB and return traffic goes through routerC.
+
+`load_config(path)` raises `ConfigError` (a `ValueError`) with the device and field when:
+
+- a field is missing or has the wrong type, or two devices share a UDP endpoint
+- a neighbor is unknown or one-way, or a pair of neighbors has no link entry
+- a host does not have exactly one neighbor, or its gateway is not that neighbor
+- a forwarding entry names an unknown destination or a next hop that is not a neighbor
+- following the forwarding tables for a path loops, dead-ends, or does not match `paths.forward` or `paths.return`
+
+`get_endpoint(config, name)` returns a device's `(host, port)` and `get_link(config, a, b)` returns the link between two devices.
 
 ## Testing
 
