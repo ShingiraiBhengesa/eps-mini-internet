@@ -3,91 +3,135 @@
 
 ## Overview
 
-This project implements a virtual network using Python 3 and UDP sockets. Devices have virtual addresses and configured UDP endpoints. Hosts exchange messages through routers, which forward packets using manually configured forwarding tables.
+This project uses Python 3 and UDP sockets to create a small virtual network with two hosts and four routers. Each device has a virtual address and a UDP endpoint. Hosts communicate by sending packets through routers, which use static forwarding tables to determine where to send packets next.
 
-The extension implements Track B: reliable transfer using a stop-and-wait protocol.
+For the extension, we chose Track B: reliable transfer using a stop-and-wait protocol. This will be implemented after the basic network is working.
 
 ## Packet Format
 
-Packets are JSON objects serialized as UTF-8 bytes.
+Packets are JSON objects converted into UTF-8 bytes.
 
 | Field | Description |
 |---|---|
 | `src` | Virtual source address |
 | `dst` | Virtual destination address |
-| `hop_limit` | Remaining hop budget, from 0 to 255 |
+| `hop_limit` | Maximum number of remaining hops |
 | `type` | Message type |
-| `message_id` | Identifier for a message and its related logs |
-| `payload` | Application payload |
+| `message_id` | ID used to match messages and responses |
+| `payload` | Message content |
 
-Message types are `PROBE`, `ECHO`, `DATA`, and `ACK`. Addresses are at most 32 characters and `message_id` at most 64.
+The supported message types are `PROBE`, `ECHO`, `DATA` and `ACK`.
 
-Serialized packets must not exceed 1,200 bytes. `decode_packet` raises `PacketError` for packets that are empty, oversized, not UTF-8 JSON objects, have missing, extra, or duplicate fields, or have fields of the wrong type or out of range.
+Packets cannot exceed 1,200 bytes. The packet module checks for missing fields, invalid values, malformed JSON and oversized packets.
 
 ## Module Interfaces
 
-- `src.packet`: `encode_packet(packet)`, `decode_packet(data)`, and `validate_packet(packet)`.
-- `src.config`: `load_config(path)` returns a validated topology configuration.
-- `src.transport`: `create_udp_socket(host, port)`, `send_packet(sock, endpoint, packet)`, and `receive_packet(sock)`.
-- `src.host`: Host application behavior.
-- `src.router`: Packet forwarding behavior.
+- `src/packet.py` – Encodes, decodes and validates packets.
+- `src/config.py` – Loads and validates the network configuration.
+- `src/transport.py` – Handles sending and receiving packets over UDP.
+- `src/host.py` – Sends probes, responds with echoes and handles timeouts.
+- `src/router.py` – Forwards packets using static forwarding tables.
+- `src/forwarding_checks.py` – Checks hop limits, destinations and next hops.
+- `src/conditions.py` – Handles packet loss and delay.
+- `src/run_log.py` – Records network events in JSON format.
 
 ## Configuration
 
-`config/topology.json` defines the topology: two hosts and four routers.
+The network topology is defined in `config/topology.json`.
 
-```
+```text
           +-- routerB --+
 host1 -- routerA        routerD -- host2
           +-- routerC --+
 ```
 
-| Section | Contents |
-|---|---|
-| `devices.<name>` | `virtual_address` (must equal the name), `role` (`host` or `router`), `udp_host`, `udp_port`, `neighbors` |
-| host only | `gateway`: the host's single neighbor; every outgoing packet goes there |
-| router only | `forwarding_table`: maps a destination address to a next-hop neighbor |
-| `links[]` | `endpoints` (two neighbors), `loss` (0 to 1), `delay_ms` (>= 0) for loss and delay injection |
-| `paths` | `forward` (host1 to host2) and `return` (host2 to host1) device lists |
+Each device has a virtual address, UDP endpoint and list of neighbors. Routers also have forwarding tables that specify the next hop for each destination.
 
-Forward traffic goes through routerB and return traffic goes through routerC.
+The configuration includes settings for packet loss and delay on each link. Invalid configurations are rejected with an error message.
 
-`load_config(path)` raises `ConfigError` (a `ValueError`) with the device and field when:
+The default configuration sends packets from host1 to host2 through routerB and returns them through routerC.
 
-- a field is missing or has the wrong type, or two devices share a UDP endpoint
-- a neighbor is unknown or one-way, or a pair of neighbors has no link entry
-- a host does not have exactly one neighbor, or its gateway is not that neighbor
-- a forwarding entry names an unknown destination or a next hop that is not a neighbor
-- following the forwarding tables for a path loops, dead-ends, or does not match `paths.forward` or `paths.return`
+We also have two separate configurations to test both paths:
 
-`get_endpoint(config, name)` returns a device's `(host, port)` and `get_link(config, a, b)` returns the link between two devices.
+- `config/topology_upper.json` – Uses routerB for both directions.
+- `config/topology_lower.json` – Uses routerC for both directions.
+
+These configurations can be generated using:
+
+`python -m scripts.make_routes`
 
 ## Host
 
-Answer probes (run in its own terminal):
+To start host2 and have it respond to probes:
 
 `python -m src.host --name host2`
 
-Send probes and report round-trip times:
+To send three probes from host1 to host2:
 
 `python -m src.host --name host1 --probe host2 --count 3 --timeout 2`
 
-The host sends every packet to its gateway. When a `PROBE` addressed to it arrives, it replies with an `ECHO` that keeps the same `message_id` and payload. Malformed packets and packets addressed to other devices are logged and dropped. Options: `--config`, `--interval`, `--hop-limit` (default 16), `--payload`. Exit status is 0 if every probe was answered, 1 if any timed out, and 2 on a configuration or usage error.
+When a host receives a `PROBE`, it sends back an `ECHO` with the same message ID and payload. The sending host waits for a matching response and reports the round-trip time or a timeout.
 
-`Host` takes a `log(device, event, packet=None, **details)` callable. It uses a placeholder printer until the shared logging module is ready.
+## Router
+
+Each router receives packets and uses its forwarding table to determine the next hop.
+
+Before forwarding, the router checks the destination, next hop and hop limit. Packets with invalid forwarding information or an exhausted hop limit are dropped.
+
+The routers also support configurable packet loss and delay, and log events such as receiving, forwarding and dropping packets.
+
+To start a router:
+
+`python -m src.router --name routerA`
+
+Replace `routerA` with `routerB`, `routerC` or `routerD` to start the other routers.
+
+## Running the Network
+
+Each host and router runs as a separate process, so the network requires six terminals.
+
+For the upper path, run the following commands in separate terminals:
+
+```bash
+python -m src.router --name routerA --config config/topology_upper.json
+python -m src.router --name routerB --config config/topology_upper.json
+python -m src.router --name routerC --config config/topology_upper.json
+python -m src.router --name routerD --config config/topology_upper.json
+python -m src.host --name host2 --config config/topology_upper.json
+python -m src.host --name host1 --probe host2 --count 3 --timeout 2 --config config/topology_upper.json
+```
+
+To test the lower path, stop the processes and run the same commands using `config/topology_lower.json`.
+
+Host2 can also initiate communication by running host1 as the receiving host.
 
 ## Testing
 
-Install pytest:
+Install pytest if it is not already installed:
 
 `python -m pip install pytest`
 
-Run tests from the repository root:
+Run all tests from the repository root:
 
 `python -m pytest -q`
 
-Tests cover packet encoding and decoding, malformed packets, oversized packets, configuration validation, UDP communication, and host probe/echo behavior.
+The tests cover:
+
+- Packet encoding, decoding and validation
+- Configuration validation
+- UDP communication
+- Host probe/echo communication and timeouts
+- Router forwarding and hop-limit enforcement
+- Packet loss and delay
+- Network logging
+- Upper and lower routing paths
 
 ## Track B
 
-The reliable-transfer extension uses numbered messages, acknowledgments, retransmissions, timeouts, and duplicate detection. A sender has at most one unacknowledged message at a time. The receiver delivers messages in order and only once.
+For the second phase, we plan to implement reliable transfer using a stop-and-wait protocol.
+
+The sender will send one message at a time and wait for an acknowledgment before sending the next message. If an acknowledgment is not received within the timeout, the message will be retransmitted.
+
+We also plan to include sequence numbers and duplicate detection so messages are delivered in order without duplicates.
+
+This extension has not been implemented yet.
