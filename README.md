@@ -60,6 +60,20 @@ Forward traffic goes through routerB and return traffic goes through routerC.
 
 `get_endpoint(config, name)` returns a device's `(host, port)` and `get_link(config, a, b)` returns the link between two devices.
 
+## Host
+
+Answer probes (run in its own terminal):
+
+`python -m src.host --name host2`
+
+Send probes and report round-trip times:
+
+`python -m src.host --name host1 --probe host2 --count 3 --timeout 2`
+
+The host sends every packet to its gateway. When a `PROBE` addressed to it arrives, it replies with an `ECHO` that keeps the same `message_id` and payload. Malformed packets and packets addressed to other devices are logged and dropped. Options: `--config`, `--interval`, `--hop-limit` (default 16), `--payload`. Exit status is 0 if every probe was answered, 1 if any timed out, and 2 on a configuration or usage error.
+
+`Host` takes a `log(device, event, packet=None, **details)` callable. It uses a placeholder printer until the shared logging module is ready.
+
 ## Testing
 
 Install pytest:
@@ -70,7 +84,7 @@ Run tests from the repository root:
 
 `python -m pytest -q`
 
-Tests cover packet encoding and decoding, malformed packets, oversized packets, configuration validation, and UDP communication.
+Tests cover packet encoding and decoding, malformed packets, oversized packets, configuration validation, UDP communication, and host probe/echo behavior.
 
 ## Track B
 
