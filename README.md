@@ -5,7 +5,7 @@
 
 This project uses Python 3 and UDP sockets to create a small virtual network with two hosts and four routers. Each device has a virtual address and a UDP endpoint. Hosts communicate by sending packets through routers, which use static forwarding tables to determine where to send packets next.
 
-For the extension, we chose Track B: reliable transfer using a stop-and-wait protocol (see [Track B](#track-b)).
+For the extension, we chose Track B: reliable transfer using a stop-and-wait protocol (see [Track B](#track-b-reliable-transfer)).
 
 ## Quick Start
 
@@ -59,7 +59,7 @@ If you see `No module named 'scripts'` or `No module named 'src'`, you skipped t
 python -m pytest -q
 ```
 
-Expected: `162 passed` in a few seconds.
+Expected: `203 passed` in a few seconds.
 
 ### 5. Watch the network run
 
@@ -107,7 +107,7 @@ Press **Ctrl-C in terminal 1**. It stops every router and host2 and prints `Netw
 |---|---|
 | `No module named 'scripts'` or `'src'` | Run the two lines from [step 3](#3-in-every-new-terminal) in that terminal. |
 | `No module named 'pytest'` or `'matplotlib'` | The environment isn't active (`source .venv/bin/activate`), or setup was skipped ([step 2](#2-one-time-setup)). |
-| `exited with code 2 before starting`, or `Address already in use` | An old router or host is still running. Stop it with `pkill -f "src.(router|host)"`, then try again. |
+| `exited with code 2 before starting`, or `Address already in use` | An old router or host is still running. Stop it with `pkill -f "src.(router|host|reliable)"`, then try again. |
 | `... already exists; pick another --run-id or add --replace` | That run ID was used before. Add `--replace`, or pick a new `--run-id`. |
 | Terminal 2 prints answers, but terminal 1 shows nothing | Both terminals must use the same `--run-id`. |
 | `0/3 probes answered` | The network isn't running. Start terminal 1 first and wait for its `started` lines. |
@@ -294,6 +294,42 @@ python -m src.host --name host1 --probe routerD --hop-limit 6 --timeout 1 --run-
 
 In this config, routerA and routerB send packets for routerD to each other, so the probe bounces until its hop limit runs out. The validator rejects loops on the host1↔host2 routes in `paths`, so the loop uses routerD as the destination instead. Traffic between the hosts is routed normally in this config.
 
+### Reliable transfer (Track B)
+
+Restart terminal 1 with a rule that makes routerB drop DATA message 3 once. The transfer ID `demo1` makes the message IDs predictable (`sw-demo1-1` to `sw-demo1-5`):
+
+**Terminal 1:**
+
+```bash
+python -m scripts.demo_net --run-id track-b --replace --drop-rule "routerB:type=DATA,message_id=sw-demo1-3"
+```
+
+**Terminal 2:**
+
+```bash
+python -m src.reliable send --name host1 --to host2 --count 5 --transfer-id demo1 --run-id track-b
+```
+
+```text
+16:16:33.822  host1    starts a stop-and-wait transfer: 5 messages to host2, 0.5 s ACK timeout, up to 5 resends each
+...
+16:16:33.926  host1    sends DATA #3 host1→host2 to routerA (hop limit 16)  [sw-demo1-3]
+16:16:33.926  routerA  forwards DATA #3 host1→host2 to routerB, hop limit now 15  [sw-demo1-3]
+16:16:33.926  routerB  forwards DATA #3 host1→host2 to routerD, hop limit now 14  [sw-demo1-3]
+16:16:33.926  routerB  DROPS DATA #3 on the link to routerD (forced rule type=DATA,message_id=sw-demo1-3,skip=0,count=1)  [sw-demo1-3]
+16:16:34.427  host1    TIMEOUT: no ACK for #3 within 0.5 s  [sw-demo1-3]
+16:16:34.427  host1    RESENDS DATA #3 (attempt 2)  [sw-demo1-3]
+...
+16:16:34.429  host2    delivers DATA #3 to the application  [sw-demo1-3]
+16:16:34.429  host2    sends ACK #3 host2→host1 to routerD (hop limit 16)  [sw-demo1-3]
+...
+16:16:34.430  host1    gets the ACK for #3 after 3.1 ms  [sw-demo1-3]
+...
+16:16:34.531  host1    done: 5/5 acknowledged, 1 resend, 0.71 s
+```
+
+Terminal 2 prints `stop-and-wait: 5/5 messages acknowledged, 1 retransmission, 0.71 s`. Then `python -m scripts.trace logs/track-b 3` shows message 3's two attempts as separate paths. Every host in the live view already receives Track B transfers, so host2 needs no extra command. See [Track B](#track-b-reliable-transfer) for how the protocol works.
+
 ## Packet Format
 
 Packets are JSON objects encoded as UTF-8 bytes (compact separators, ASCII only). A packet has exactly these six fields: missing fields, extra fields and repeated fields are all rejected.
@@ -416,6 +452,9 @@ python -m scripts.make_routes
 | `python -m scripts.run_baseline` | The whole baseline matrix (12 runs) |
 | `python -m scripts.metrics <folder>` | Reads every run's logs; prints a table, writes `runs.csv` and `conditions.csv` |
 | `python -m scripts.plot_results <folder>` | Draws `baseline.png` from those results |
+| `python -m scripts.run_trackb evidence` | Track B's four fixed cases, each checked automatically |
+| `python -m scripts.run_trackb compare` | Best-effort vs stop-and-wait (12 runs) |
+| `python -m scripts.plot_trackb <folder>` | Draws `trackb.png` from the comparison results |
 
 Example single run:
 
@@ -479,6 +518,7 @@ The tests cover:
 - Upper and lower routing paths
 - The launcher (including a full run on spare ports) and the metrics
 - The live demo view and the packet trace
+- Track B: in-order delivery, duplicates ACKed again but not delivered twice, the receiver's waiting time, best-effort mode, resending a lost DATA message or after a lost final ACK, giving up after the retry limit, ignoring late or duplicate ACKs, sending rate, and a full transfer through real routers with forced drops
 
 ## Module Interfaces
 
@@ -491,16 +531,161 @@ The tests cover:
 - `src/conditions.py`: Applies loss, delay and forced drop rules on outgoing links.
 - `src/run_log.py`: Records network events as JSON lines, to the terminal and to per-device files.
 - `src/shutdown.py`: Stops a process cleanly on Ctrl-C or SIGTERM.
+- `src/reliable.py`: Track B: the stop-and-wait sender and receiver, the best-effort sender, and their command line.
 - `scripts/make_routes.py`: Generates the upper, lower and loop configs.
 - `scripts/launch.py`, `scripts/run_baseline.py`, `scripts/metrics.py`, `scripts/plot_results.py`: Experiment tools.
 - `scripts/demo_net.py`, `scripts/trace.py`: Live demo view and packet tracing.
+- `scripts/run_trackb.py`, `scripts/plot_trackb.py`: Track B evidence, comparison runs and chart.
 
-## Track B
+## Track B: Reliable Transfer
 
-For the second phase, we plan to implement reliable transfer using a stop-and-wait protocol.
+Track B adds reliable delivery on top of the network with a stop-and-wait protocol, plus a best-effort sender to compare it with. The code is in `src/reliable.py`. The packet format doesn't change.
 
-The sender will send one message at a time and wait for an acknowledgment before sending the next message. If an acknowledgment is not received within the timeout, the message will be retransmitted.
+### Message IDs
 
-We also plan to include sequence numbers and duplicate detection so messages are delivered in order without duplicates.
+DATA and ACK packets use the existing six fields. The sequence number is part of the message ID, `<mode>-<transfer>-<n>`:
 
-This extension has not been implemented yet.
+| Part | Meaning |
+|---|---|
+| `mode` | `sw` for stop-and-wait, `be` for best-effort |
+| `transfer` | Names one transfer: random by default, or set with `--transfer-id` |
+| `n` | Message number, 1 to N |
+
+For example, `sw-demo1-3` is message 3 of transfer `demo1`. An ACK carries the message ID of the DATA it acknowledges, the same way an ECHO carries its probe's ID. DATA payloads are `data-0001`, `data-0002`, and so on, always 9 bytes. Because the IDs are predictable, a forced drop rule can target one message, such as `type=ACK,message_id=sw-demo1-5` for the final ACK of a 5-message transfer.
+
+### Sender
+
+```mermaid
+stateDiagram-v2
+    [*] --> Sending: k = 1
+    Sending --> WaitingForAck: send DATA k, start the timer
+    WaitingForAck --> WaitingForAck: ACK for an earlier message (late or duplicate), ignore it
+    WaitingForAck --> Sending: ACK k arrives and k < N, so k = k + 1
+    WaitingForAck --> Done: ACK N arrives
+    WaitingForAck --> Sending: timer expires with resends left, resend k
+    WaitingForAck --> Failed: timer expires after RETRIES resends of k
+    Done --> [*]
+    Failed --> [*]
+```
+
+- The sender sends message k and waits up to `--timeout` seconds for its ACK.
+- If the timer expires, it resends k and counts a retransmission. After `--retries` resends of the same message, it stops and reports failure (exit code 1).
+- An ACK for an earlier message (a late or duplicate one) is logged and ignored, and so is an ACK for another transfer.
+- It never sends faster than `--rate` messages per second, resends included.
+- At the end it logs `transfer_done` and prints how many messages were acknowledged, the retransmissions and the elapsed time.
+
+### Receiver
+
+```mermaid
+stateDiagram-v2
+    [*] --> Receiving: expected = 1
+    Receiving --> Receiving: DATA expected, deliver it, ACK it, expected + 1
+    Receiving --> Receiving: DATA below expected, don't deliver, ACK it again
+    Receiving --> Receiving: DATA above expected, ignore it, no ACK
+    Receiving --> Lingering: all N messages delivered
+    Lingering --> Lingering: copy of a delivered message, ACK it again
+    Lingering --> [*]: LINGER seconds pass
+```
+
+- Only the next expected message is delivered, so every message is delivered exactly once and in order.
+- A copy of a message that was already delivered isn't delivered again, but it is ACKed again, because its first ACK may have been lost.
+- With `--expect N`, the receiver keeps answering for `--linger` seconds (default 3) after the last message, so a resent final message still gets its ACK, and then stops. Without `--expect`, it runs until Ctrl-C, as host2 does in the live view.
+- To outlast every resend of the last message, LINGER must be longer than RETRIES × TIMEOUT. The defaults give 3 s against 5 × 0.5 s = 2.5 s.
+
+In best-effort mode, the receiver delivers each new message once in any order and never sends ACKs. With `--observe S`, it stops counting S seconds after the transfer's first message.
+
+### Commands
+
+Start the four routers first, using the first four commands under [By hand](#by-hand-six-terminals). Then run the receiver in place of `python -m src.host --name host2`, since both use host2's port:
+
+```bash
+python -m src.reliable receive --name host2 --expect 20
+```
+
+Then send from host1:
+
+```bash
+python -m src.reliable send --name host1 --to host2 --count 20
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `send --mode` | `stopwait` | `stopwait` or `besteffort` |
+| `send --count` | 20 | Number of messages |
+| `send --rate` | 20 | Most messages sent per second |
+| `send --timeout` | 0.5 | Seconds to wait for each ACK |
+| `send --retries` | 5 | Resends allowed per message before giving up |
+| `send --transfer-id` | random | Name used in the message IDs |
+| `receive --expect` | none | Messages in the transfer; turns on the waiting time at the end |
+| `receive --linger` | 3 | Seconds to keep answering after the last message |
+| `receive --observe` | none | Stop this many seconds after the transfer's first message |
+
+Both also take `--config`, `--run-id` and `--log-dir`, and log to `logs/<run-id>/<host>.jsonl` like the other programs. Any host started with `python -m src.host` receives transfers too, without `--expect`.
+
+| Event | Device | Meaning |
+|---|---|---|
+| `transfer_started`, `transfer_done` | sender | Start and summary of a transfer |
+| `retransmit` | sender | A message is being resent; `attempt` counts tries |
+| `ack_received`, `ack_timeout` | sender | The ACK arrived (with `rtt_ms`), or the timer expired |
+| `ack_ignored` | sender | Late, duplicate or unrelated ACK |
+| `transfer_failed` | sender | Gave up after the retry limit |
+| `delivered` | receiver | A message was delivered to the application |
+| `duplicate` | receiver | A copy of a delivered message; `acked` says whether it was ACKed again |
+| `dropped_out_of_order` | receiver | A message from further ahead, ignored |
+| `transfer_received`, `receiver_done` | receiver | All expected messages arrived; the receiver stopped, with a summary |
+
+### Required evidence
+
+```bash
+python -m scripts.run_trackb evidence
+```
+
+This runs four stop-and-wait transfers of 10 messages and checks each one against what should happen. They use the upper path, a 20 ms delay on routerB–routerD and no random loss, with a 0.3 s timeout, 5 retries and a 2 s waiting time. Logs and `summary.csv` are in `results/trackb/evidence/`.
+
+| Case | What happened | Result |
+|---|---|---|
+| No loss | 10/10 messages delivered once and in order, 0 retransmissions, 0.49 s | PASS |
+| One DATA dropped (message 5, at routerB) | The sender timed out after 0.3 s and resent message 5. 10/10 delivered in order, no duplicates, 1 retransmission, 0.80 s | PASS |
+| Final ACK dropped (message 10's ACK, at routerD) | The sender resent message 10. The receiver, still in its waiting time, got a duplicate, didn't deliver it again and ACKed it again. The sender finished, and the receiver stopped 2 s later | PASS |
+| Destination unreachable (host2 not running) | The sender gave up on message 1 after 5 resends, in 1.81 s (6 attempts × 0.3 s), with exit code 1 | PASS |
+
+`python -m scripts.trace results/trackb/evidence/evidence-final-ack-drop 10` shows the final message hop by hop, one path per attempt:
+
+```text
+attempt 1: host1 → routerA → routerB → routerD → host2 → routerD  ✗ dropped
+attempt 2: host1 → routerA → routerB → routerD → host2 → routerD → routerB → routerA → host1
+```
+
+### Comparison with best-effort
+
+```bash
+python -m scripts.run_trackb compare
+python -m scripts.plot_trackb results/trackb/compare
+```
+
+**Setup.** Upper path, 20 ms one-way delay on routerB–routerD, and 0% or 5% loss on that link only. The loss applies in each direction, so DATA and ACKs both cross it. Both senders send the same 50 messages (9-byte payloads) at most 50 per second. Stop-and-wait uses a 0.3 s timeout and 5 retries, and its receiver waits 2 s after the last message. The best-effort receiver counts unique messages for 3 s after the first one arrives. There are 3 runs per condition, with seeds 101 to 112. Raw logs are in `results/trackb/compare/<run-id>/`.
+
+**Results** (`results/trackb/compare/conditions.csv`). Time to deliver runs from the sender starting until the last new message is delivered at host2.
+
+| Condition | Unique messages delivered | Full sequence | Resends per run | Duplicates at receiver | Time to deliver (mean ± SD) |
+|---|---|---|---|---|---|
+| Best-effort, 0% loss | 150/150 (100%) | 3 of 3 runs | 0 | 0 | 1.01 ± 0.00 s |
+| Stop-and-wait, 0% loss | 150/150 (100%) | 3 of 3 runs | 0 | 0 | 2.22 ± 0.03 s |
+| Best-effort, 5% loss | 140/150 (93.3%) | 0 of 3 runs | 0 | 0 | 1.00 ± 0.00 s |
+| Stop-and-wait, 5% loss | 150/150 (100%) | 3 of 3 runs | 4.0 | 3 | 3.40 ± 0.01 s |
+
+![Track B comparison](results/trackb/compare/trackb.png)
+
+**Reading the results: reliability costs time.**
+
+- **Reliability.** Stop-and-wait delivered every message once and in order in all 6 runs. At 5% loss, best-effort lost 10 of 150 messages (6.7%, against 5% expected for one crossing of the lossy link), and none of its lossy runs got the full sequence.
+- **Cost without loss.** Stop-and-wait took 2.22 s against 1.01 s, about 2.2 times as long, with nothing lost. It waits for each ACK, so it sends at most one message per round trip (about 44 ms here). Best-effort sends one every 20 ms, its 50-per-second limit. 50 × 44 ms ≈ 2.2 s.
+- **Cost with loss.** Each lost DATA or ACK costs a full 0.3 s timeout before the resend. Every attempt crosses the lossy link twice, DATA out and ACK back, so it fails with probability 1 − 0.95² ≈ 9.75%, about 5 failures in a run's 54 attempts. Each of the three runs happened to lose 4, at different messages: seed 110 lost DATA 15, 21 and 43 and ACK 16; seed 111 lost DATA 14, DATA 16 twice in a row, and ACK 26; seed 112 lost ACK 5 and DATA 30, 32 and 48. With the same number of losses, their times nearly match: 2.2 s + 4 × 0.3 s ≈ 3.4 s, about 3.4 times best-effort's.
+- **Duplicates come from lost ACKs.** 3 of the 12 losses were ACKs. Each time, the receiver got the message again, didn't deliver it twice, and ACKed it again.
+- **Best-effort's time doesn't change with loss,** but its losses are permanent. Stop-and-wait trades time for complete, in-order, duplicate-free delivery, and the trade gets worse as loss or the round trip grows.
+
+### Limitations
+
+- If every ACK for the final message is lost, the sender reports failure even though the receiver delivered everything. No protocol can rule this out completely. The waiting time makes it unlikely, because all 6 attempts' ACKs would have to be lost.
+- Only one message is in flight at a time, so stop-and-wait sends at most one message per round trip. On a long link most of the time is spent waiting.
+- The timeout is fixed. A real protocol would adapt it to the measured round-trip time.

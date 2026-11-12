@@ -1,0 +1,1 @@
+{"run_id":"trackb-be-l5-s107","device":"routerC","timestamp":1794522454.155791,"event":"started","endpoint":"127.0.0.1:5103","seed":1072,"links":[{"neighbor":"routerA","loss":0.0,"delay_ms":0},{"neighbor":"routerD","loss":0.0,"delay_ms":0}],"drop_rules":[]}

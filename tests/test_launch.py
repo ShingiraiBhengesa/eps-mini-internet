@@ -98,3 +98,39 @@ def test_run_experiment_refuses_to_overwrite(tmp_path):
 
     with pytest.raises(RuntimeError, match="already exists"):
         run_experiment("config/topology_upper.json", "taken", 1, tmp_path)
+
+
+def test_run_transfer_end_to_end(tmp_path, upper_config_on_free_ports):
+    from scripts.launch import run_transfer
+
+    run_dir, meta = run_transfer(
+        upper_config_on_free_ports, "xfer-1", 3, tmp_path / "runs",
+        mode="stopwait", count=4, rate=100, timeout=0.3, retries=3, linger=0.5,
+        link="routerB-routerD", loss=0.0, delay_ms=5,
+        drop_rules=[("routerB", "type=DATA,message_id=sw-xfer-1-2")],
+    )
+
+    assert meta["sender_exit_code"] == 0
+    assert meta["receiver_exited_by_itself"] is True
+    m = run_metrics(run_dir)
+    assert m["kind"] == "transfer"
+    assert (m["delivered"], m["full_sequence"], m["in_order"]) == (4, True, True)
+    assert (m["retransmissions"], m["data_drops"], m["duplicates_at_receiver"]) == (1, 1, 0)
+    assert m["sender_success"] is True
+    assert m["receiver_stop"] == "linger_over"
+    assert m["delivery_time_s"] > 0
+
+
+def test_run_transfer_to_a_host_that_is_down(tmp_path, upper_config_on_free_ports):
+    from scripts.launch import run_transfer
+
+    run_dir, meta = run_transfer(
+        upper_config_on_free_ports, "down-1", 1, tmp_path / "runs",
+        count=3, timeout=0.1, retries=2, start_receiver=False,
+    )
+
+    m = run_metrics(run_dir)
+    assert meta["sender_exit_code"] == 1
+    assert (m["sender_success"], m["failed_at"], m["retransmissions"]) == (False, 1, 2)
+    assert m["delivered"] == 0
+    assert not (run_dir / "host2.jsonl").exists()

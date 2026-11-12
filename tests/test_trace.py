@@ -3,7 +3,9 @@ import json
 
 import pytest
 
-from scripts.trace import describe, format_trace, load_records, main, pick_message, probes, trace
+from scripts.trace import (
+    describe, format_trace, load_records, main, messages, pick_message, probes, trace,
+)
 
 
 def rec(t, device, event, mid=None, kind="PROBE", src="host1", dst="host2", hop=16, **extra):
@@ -53,11 +55,13 @@ def test_trace_follows_the_round_trip_in_time_order(tmp_path):
     write_logs(tmp_path, answered_probe("host1-aa-1"))
     records = load_records(tmp_path)
 
-    events, path = trace(records, "host1-aa-1")
+    events, paths = trace(records, "host1-aa-1")
 
     assert [e["timestamp"] for e in events] == sorted(e["timestamp"] for e in events)
-    assert path == ["host1", "routerA", "routerB", "routerD", "host2", "routerD", "host1"]
-    text = format_trace(events, path)
+    assert [p["devices"] for p in paths] == [
+        ["host1", "routerA", "routerB", "routerD", "host2", "routerD", "host1"]
+    ]
+    text = format_trace(events, paths)
     assert "holds PROBE 20 ms for the link to routerD" in text
     assert "round trip 51.0 ms" in text
     assert "dropped" not in text
@@ -65,10 +69,10 @@ def test_trace_follows_the_round_trip_in_time_order(tmp_path):
 
 def test_trace_marks_a_dropped_packet(tmp_path):
     write_logs(tmp_path, dropped_probe("host1-aa-2", 0))
-    events, path = trace(load_records(tmp_path), "host1-aa-2")
+    events, paths = trace(load_records(tmp_path), "host1-aa-2")
 
-    text = format_trace(events, path)
-    assert path == ["host1", "routerA"]
+    text = format_trace(events, paths)
+    assert paths == [{"devices": ["host1", "routerA"], "dropped": True}]
     assert "DROPS PROBE on the link to routerB (forced rule type=PROBE,skip=0,count=1)" in text
     assert text.endswith("✗ dropped")
 
@@ -124,3 +128,72 @@ def test_cli_lists_and_traces(tmp_path, capsys):
     assert "path: host1 → routerA" in capsys.readouterr().out
 
     assert main([str(tmp_path / "empty")]) == 2
+
+
+def resent_data(mid="sw-t-3"):
+    """DATA 3 dropped at routerB, then resent and acknowledged."""
+    def data(t, device, event, **extra):
+        return rec(t, device, event, mid, kind="DATA", **extra)
+
+    def ack(t, device, event, **extra):
+        return rec(t, device, event, mid, kind="ACK", src="host2", dst="host1", **extra)
+
+    return [
+        data(0, "host1", "sent", next_hop="routerA"),
+        data(1, "routerA", "received"),
+        data(2, "routerB", "received", hop=15),
+        data(3, "routerB", "drop_forced", hop=14, next_hop="routerD", rule="type=DATA,skip=0,count=1"),
+        data(300, "host1", "ack_timeout", seq=3, attempt=1, timeout_s=0.3),
+        data(301, "host1", "retransmit", seq=3, attempt=2),
+        data(301, "host1", "sent", next_hop="routerA"),
+        data(302, "routerA", "received"),
+        data(303, "routerB", "received", hop=15),
+        data(325, "routerD", "received", hop=14),
+        data(326, "host2", "received", hop=13),
+        data(326, "host2", "delivered", seq=3, mode="stopwait"),
+        ack(327, "host2", "sent", next_hop="routerD"),
+        ack(328, "routerD", "received"),
+        ack(350, "routerB", "received", hop=15),
+        ack(351, "routerA", "received", hop=14),
+        ack(352, "host1", "received", hop=13),
+        ack(352, "host1", "ack_received", seq=3, attempt=2, rtt_ms=51.0),
+    ]
+
+
+def test_trace_shows_one_path_per_attempt_for_resent_data():
+    events, paths = trace(resent_data(), "sw-t-3")
+
+    assert paths == [
+        {"devices": ["host1", "routerA", "routerB"], "dropped": True},
+        {"devices": ["host1", "routerA", "routerB", "routerD", "host2", "routerD",
+                     "routerB", "routerA", "host1"], "dropped": False},
+    ]
+    text = format_trace(events, paths)
+    assert "attempt 1: host1 → routerA → routerB  ✗ dropped" in text
+    assert "RESENDS DATA #3 (attempt 2)" in text
+    assert "sends DATA #3 host1→host2 to routerA" in text
+
+
+def test_message_list_includes_track_b_data():
+    assert messages(resent_data()) == {
+        "sw-t-3": "delivered and acknowledged after 2 attempts (dropped at routerB, drop_forced)",
+    }
+    assert pick_message(resent_data(), "3") == "sw-t-3"
+
+
+@pytest.mark.parametrize("record,expected", [
+    (rec(0, "host2", "duplicate", "sw-t-10", kind="DATA", seq=10, acked=True),
+     "gets DATA #10 again: not delivered twice, ACKs it again"),
+    (rec(0, "host1", "transfer_failed", "sw-t-1", kind="DATA", seq=1, attempts=6),
+     "GIVES UP on #1 after 6 attempts"),
+    (rec(0, "host1", "transfer_done", mode="stopwait", success=True, acked=10, messages=10,
+         retransmissions=1, elapsed_s=1.234),
+     "done: 10/10 acknowledged, 1 resend, 1.23 s"),
+    (rec(0, "host2", "receiver_done", reason="linger_over", delivered=10, expected=10, duplicates=1),
+     "stops (waiting time over): delivered 10/10, 1 duplicate"),
+    (rec(0, "routerD", "forward", "sw-t-4", kind="ACK", src="host2", dst="host1", hop=15,
+         next_hop="routerB"),
+     "forwards ACK #4 host2→host1 to routerB, hop limit now 15"),
+])
+def test_describe_track_b_events(record, expected):
+    assert describe(record) == expected

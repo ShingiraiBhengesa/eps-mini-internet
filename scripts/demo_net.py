@@ -84,9 +84,11 @@ def feed_line(record, show_all=False, color=False):
         return f"{clock}  {device:<8} {text}{tag}"
 
     c = COLORS
-    if event.startswith("drop") or event == "probe_timeout":
+    failed = event == "transfer_done" and record.get("success") is False
+    if (event.startswith("drop") or failed
+            or event in ("probe_timeout", "ack_timeout", "transfer_failed")):
         text = f"{c['red']}{text}{c['reset']}"
-    elif event == "echo_received":
+    elif event in ("echo_received", "ack_received", "transfer_done"):
         text = f"{c['green']}{text}{c['reset']}"
     return (f"{c['dim']}{clock}{c['reset']}  {c['bold']}{device:<8}{c['reset']} "
             f"{text}{c['dim']}{tag}{c['reset']}")
