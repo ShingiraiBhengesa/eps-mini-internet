@@ -7,23 +7,11 @@ import uuid
 
 from .config import ConfigError, get_endpoint, load_config
 from .packet import PacketError
+from .run_log import DEFAULT_LOG_DIR, create_logger, log_path, run_id_arg
+from .shutdown import stop_on_signals
 from .transport import create_udp_socket, receive_packet, send_packet
 
 DEFAULT_HOP_LIMIT = 16
-
-
-def print_log(device, event, packet=None, **details):
-    """Placeholder logger until the shared logging module is ready."""
-    fields = [f"device={device}", f"event={event}"]
-
-    if packet is not None:
-        for key in ("message_id", "type", "src", "dst", "hop_limit"):
-            fields.append(f"{key}={packet[key]}")
-
-    for key, value in details.items():
-        fields.append(f"{key}={value}")
-
-    print(f"{time.time():.3f} " + " ".join(fields), flush=True)
 
 
 class Host:
@@ -34,7 +22,7 @@ class Host:
         config,
         name,
         sock=None,
-        log=print_log,
+        log=None,
         hop_limit=DEFAULT_HOP_LIMIT,
     ):
         device = config["devices"].get(name)
@@ -46,18 +34,34 @@ class Host:
         self.gateway = device["gateway"]
         self.gateway_endpoint = get_endpoint(config, self.gateway)
         self.hop_limit = hop_limit
-        self.log = log
+        self.log = log if log is not None else create_logger("default")
         self.sock = sock or create_udp_socket(*get_endpoint(config, name))
+        # Probe IDs are <host>-<session>-<n>: the session part keeps a late
+        # echo from an earlier program run from matching a new probe.
+        self.session = uuid.uuid4().hex[:8]
+        self.probes_sent = 0
 
     def close(self):
         self.sock.close()
 
+    def log_start(self, mode):
+        host, port = self.sock.getsockname()[:2]
+        self.log(
+            self.name,
+            "started",
+            mode=mode,
+            endpoint=f"{host}:{port}",
+            gateway=self.gateway,
+            hop_limit=self.hop_limit,
+        )
+
     def send_probe(self, dst, payload="", timeout=2.0):
-        """Send one PROBE and wait for its ECHO.
+        """Send one PROBE and wait for an ECHO with the same ID and payload.
 
         Returns the round-trip time in milliseconds, or None on timeout.
         """
-        message_id = f"{self.name}-{uuid.uuid4().hex[:12]}"
+        self.probes_sent += 1
+        message_id = f"{self.name}-{self.session}-{self.probes_sent}"
         probe = self._make_packet("PROBE", dst, message_id, payload)
 
         start = time.monotonic()
@@ -73,12 +77,23 @@ class Host:
             if echo is None:
                 continue
 
-            if echo["message_id"] == message_id and echo["src"] == dst:
-                rtt_ms = (time.monotonic() - start) * 1000
-                self.log(self.name, "echo_received", echo, rtt_ms=f"{rtt_ms:.3f}")
-                return rtt_ms
+            if echo["message_id"] != message_id or echo["src"] != dst:
+                self.log(self.name, "dropped_unexpected_echo", echo)
+                continue
 
-            self.log(self.name, "dropped_unexpected_echo", echo)
+            if echo["payload"] != payload:
+                self.log(
+                    self.name, "echo_payload_mismatch", echo,
+                    expected_payload=payload, received_payload=echo["payload"],
+                )
+                continue
+
+            rtt_ms = (time.monotonic() - start) * 1000
+            self.log(
+                self.name, "echo_received", echo,
+                rtt_ms=round(rtt_ms, 3), payload_bytes=len(payload),
+            )
+            return rtt_ms
 
         self.log(self.name, "probe_timeout", probe, timeout_s=timeout)
         return None
@@ -147,6 +162,11 @@ class Host:
         self.log(self.name, "sent", packet, next_hop=self.gateway)
 
 
+def default_payload(number):
+    """Same length for every probe, so message size stays fixed."""
+    return f"probe-{number:04d}"
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run a mini-internet host.")
     parser.add_argument("--config", default="config/topology.json")
@@ -160,31 +180,49 @@ def main(argv=None):
     parser.add_argument("--interval", type=float, default=1.0)
     parser.add_argument("--timeout", type=float, default=2.0)
     parser.add_argument("--hop-limit", type=int, default=DEFAULT_HOP_LIMIT)
-    parser.add_argument("--payload", default="")
+    parser.add_argument(
+        "--payload",
+        help="payload for every probe (default: probe-0001, probe-0002, ...)",
+    )
+    parser.add_argument("--run-id", type=run_id_arg, default="default")
+    parser.add_argument(
+        "--log-dir",
+        default=DEFAULT_LOG_DIR,
+        help="write this host's log to LOG_DIR/RUN_ID/NAME.jsonl "
+             "(also printed to the terminal)",
+    )
     args = parser.parse_args(argv)
+
+    log = create_logger(
+        args.run_id,
+        path=log_path(args.log_dir, args.run_id, args.name),
+    )
 
     try:
         config = load_config(args.config)
         if args.probe is not None and args.probe not in config["devices"]:
             raise ConfigError(f"unknown destination {args.probe}")
-        host = Host(config, args.name, hop_limit=args.hop_limit)
+        host = Host(config, args.name, log=log, hop_limit=args.hop_limit)
     except (ConfigError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
     try:
         if args.probe is None:
+            host.log_start("serve")
             host.serve()
             return 0
 
+        host.log_start("probe")
         answered = 0
         for i in range(args.count):
             if i:
                 time.sleep(args.interval)
-            if host.send_probe(args.probe, args.payload, args.timeout) is not None:
+            payload = args.payload if args.payload is not None else default_payload(i + 1)
+            if host.send_probe(args.probe, payload, args.timeout) is not None:
                 answered += 1
 
-        print(f"{answered}/{args.count} probes answered")
+        print(f"{answered}/{args.count} probes answered", file=sys.stderr)
         return 0 if answered == args.count else 1
     except PacketError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -193,7 +231,9 @@ def main(argv=None):
         return 0
     finally:
         host.close()
+        log.close()
 
 
 if __name__ == "__main__":
+    stop_on_signals()
     sys.exit(main())

@@ -1,10 +1,11 @@
 
+import json
 import threading
 
 import pytest
 
 from src.config import ConfigError, load_config
-from src.host import Host, main
+from src.host import Host, default_payload, main
 from src.packet import decode_packet, encode_packet
 from src.transport import create_udp_socket, receive_packet, send_packet
 
@@ -190,3 +191,77 @@ def test_cli_rejects_unknown_host(capsys):
 def test_cli_rejects_unknown_destination(capsys):
     assert main(["--name", "host1", "--probe", "hostZ"]) == 2
     assert "unknown destination" in capsys.readouterr().err
+
+
+def echo_back(probe, **changes):
+    return dict(probe, src=probe["dst"], dst=probe["src"], type="ECHO", **changes)
+
+
+def test_probe_rejects_echo_with_wrong_payload(net):
+    def fake_router():
+        probe, sender = receive_packet(net["routerA"])
+        send_packet(net["routerA"], sender, echo_back(probe, payload="tampered"))
+
+    thread = threading.Thread(target=fake_router)
+    thread.start()
+
+    assert net["host1"].send_probe("host2", payload="hi", timeout=0.3) is None
+    thread.join()
+    assert "echo_payload_mismatch" in net["log1"].events
+    assert "echo_received" not in net["log1"].events
+
+
+def test_probe_ids_count_up_within_a_session(net):
+    seen = []
+
+    def fake_router():
+        for _ in range(2):
+            probe, sender = receive_packet(net["routerA"])
+            seen.append(probe["message_id"])
+            send_packet(net["routerA"], sender, echo_back(probe))
+
+    thread = threading.Thread(target=fake_router)
+    thread.start()
+
+    for _ in range(2):
+        assert net["host1"].send_probe("host2", payload="x", timeout=2) is not None
+    thread.join()
+
+    session = net["host1"].session
+    assert seen == [f"host1-{session}-1", f"host1-{session}-2"]
+
+
+def test_default_payloads_have_fixed_length():
+    assert {len(default_payload(n)) for n in (1, 20, 999, 9999)} == {10}
+
+
+def test_cli_writes_json_log_file_with_run_id(tmp_path):
+    config = load_config("config/topology.json")
+    gateway = create_udp_socket("127.0.0.1", 0)
+    probe_port = create_udp_socket("127.0.0.1", 0)
+    config["devices"]["routerA"]["udp_port"] = gateway.getsockname()[1]
+    config["devices"]["host1"]["udp_port"] = probe_port.getsockname()[1]
+    probe_port.close()
+    config_path = tmp_path / "topology.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    try:
+        code = main([
+            "--name", "host1", "--probe", "host2", "--timeout", "0.1",
+            "--config", str(config_path),
+            "--run-id", "cli-test", "--log-dir", str(tmp_path / "logs"),
+        ])
+    finally:
+        gateway.close()
+
+    assert code == 1
+    lines = (tmp_path / "logs" / "cli-test" / "host1.jsonl").read_text().splitlines()
+    records = [json.loads(line) for line in lines]
+    assert [r["event"] for r in records] == ["started", "sent", "probe_timeout"]
+    assert {r["run_id"] for r in records} == {"cli-test"}
+    assert records[1]["message_id"].startswith("host1-")
+
+
+def test_cli_failure_leaves_no_log_file(tmp_path):
+    assert main(["--name", "hostZ", "--log-dir", str(tmp_path)]) == 2
+    assert not any(tmp_path.iterdir())
