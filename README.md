@@ -500,6 +500,10 @@ python -m scripts.plot_results results/manual/baseline-check
 - **Loss** applies in both directions, so a probe succeeds with probability 0.95² ≈ 90.25%. Across both delay settings, 12 of 120 lossy probes failed (90.0% success). The gap between 93.3% and 86.7% comes from 20-probe samples, not from the delay: one 80 ms run (seed 11) lost 5 of 20.
 - **Every timeout matches exactly one `drop_injected` event** on routerB or routerD, and no run was incomplete. Repeating the matrix with the same seeds lost exactly the same probes in every run.
 
+## Wireshark Evidence
+
+[`results/wireshark/README.md`](results/wireshark/README.md) has the two packet captures and their write-up. One capture shows a probe and its echo hop by hop; the other shows a Track B retransmission. The write-up maps each UDP port to its device, explains the JSON fields, and matches every frame to a log line. It also explains how to take the captures.
+
 ## Testing
 
 ```bash
