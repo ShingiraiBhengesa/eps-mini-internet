@@ -15,8 +15,10 @@ import argparse
 import json
 import os
 import shutil
+import signal
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -91,15 +93,20 @@ def feed_line(record, show_all=False, color=False):
 
 
 def follow(follower, stop, out=sys.stdout, show_all=False, color=False, interval=0.1):
-    """Print the feed until stop is set, then print what is left."""
+    """Print the feed until stop is set, then print what is left.
+
+    Sleeps with time.sleep rather than Event.wait: Ctrl-C interrupts a
+    sleep cleanly, but can land inside Event.wait's lock handling.
+    """
     while True:
-        finished = stop.wait(interval)
+        finished = stop.is_set()
         for record in follower.poll():
             line = feed_line(record, show_all, color)
             if line:
                 print(line, file=out, flush=True)
         if finished:
             return
+        time.sleep(interval)
 
 
 def use_color(stream):
@@ -163,9 +170,10 @@ def main(argv=None):
 
     print(f"Network is up: run '{args.run_id}', config {args.config}. "
           f"Logs: {run_dir}/")
+    log_dir_arg = "" if args.log_dir == DEFAULT_LOG_DIR else f" --log-dir {args.log_dir}"
     print("Send probes from another terminal, for example:")
     print(f"  python -m src.host --name host1 --probe host2 --count 3 "
-          f"--config {args.config} --run-id {args.run_id} --log-dir {args.log_dir}")
+          f"--run-id {args.run_id}{log_dir_arg}")
     print("Press Ctrl-C here to stop the network.\n", flush=True)
 
     follower = LogFollower(run_dir)
@@ -176,6 +184,9 @@ def main(argv=None):
     except KeyboardInterrupt:
         pass
     finally:
+        # A second Ctrl-C must not cut the shutdown short.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
         network.stop()
         stop.set()
         follow(follower, stop, show_all=args.all, color=color)  # last few lines
