@@ -7,9 +7,30 @@ This project uses Python 3 and UDP sockets to create a small virtual network wit
 
 For the extension, we chose Track B: reliable transfer using a stop-and-wait protocol (see [Track B](#track-b)).
 
-## Setup
+## Quick Start
 
-Requires Python 3.10 or newer (developed and tested on Python 3.13 on macOS). From the repository root:
+Requires Python 3.10 or newer. Developed and tested on Python 3.13 on macOS. Everything runs on your own computer over localhost, so no network connection is needed after setup.
+
+### 1. Get the code
+
+First time:
+
+```bash
+git clone https://github.com/ShingiraiBhengesa/eps-mini-internet.git
+cd eps-mini-internet
+```
+
+Already cloned? Update it:
+
+```bash
+cd eps-mini-internet
+git switch main
+git pull
+```
+
+### 2. One-time setup
+
+From inside the `eps-mini-internet` folder, create a virtual environment and install the two packages the project uses, `pytest` for tests and `matplotlib` for plots:
 
 ```bash
 python3 -m venv .venv
@@ -17,7 +38,261 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-`requirements.txt` lists `pytest` (tests) and `matplotlib` (plots). The network itself uses only the standard library. Every command below assumes the virtual environment is active and is run from the repository root.
+On Windows, activate with `.venv\Scripts\activate` instead of `source .venv/bin/activate`.
+
+### 3. In every new terminal
+
+Every command in this README must run **from the project folder** with the **virtual environment active**. Each new terminal window or tab starts outside both, so first run:
+
+```bash
+cd ~/eps-mini-internet
+source .venv/bin/activate
+```
+
+If you cloned the project somewhere other than your home folder, use that path in the `cd` line. Your prompt now starts with `(.venv)`. If you use conda and your prompt also shows `(base)`, that's fine: once `.venv` is active, `python` uses the project's environment.
+
+If you see `No module named 'scripts'` or `No module named 'src'`, you skipped this step: you're in the wrong folder, or the environment isn't active.
+
+### 4. Check that everything works
+
+```bash
+python -m pytest -q
+```
+
+Expected: `162 passed` in a few seconds.
+
+### 5. Watch the network run
+
+Open two terminals and do step 3 in both.
+
+**Terminal 1** starts the four routers and host2, then shows every event as it happens. Leave it running:
+
+```bash
+python -m scripts.demo_net --run-id demo --replace
+```
+
+**Terminal 2** sends three probes from host1 to host2:
+
+```bash
+python -m src.host --name host1 --probe host2 --count 3 --run-id demo
+```
+
+Terminal 2 prints `3/3 probes answered`. Terminal 1 shows each probe crossing the network and the echo coming back:
+
+```text
+14:49:33.678  host1    sends PROBE host1→host2 to routerA (hop limit 16)  [host1-3622e93a-1]
+14:49:33.678  routerA  forwards PROBE host1→host2 to routerB, hop limit now 15  [host1-3622e93a-1]
+14:49:33.679  routerB  forwards PROBE host1→host2 to routerD, hop limit now 14  [host1-3622e93a-1]
+14:49:33.679  routerD  forwards PROBE host1→host2 to host2, hop limit now 13  [host1-3622e93a-1]
+14:49:33.679  host2    sends ECHO host2→host1 to routerD (hop limit 16)  [host1-3622e93a-1]
+14:49:33.679  routerD  forwards ECHO host2→host1 to routerB, hop limit now 15  [host1-3622e93a-1]
+14:49:33.679  routerB  forwards ECHO host2→host1 to routerA, hop limit now 14  [host1-3622e93a-1]
+14:49:33.679  routerA  forwards ECHO host2→host1 to host1, hop limit now 13  [host1-3622e93a-1]
+14:49:33.680  host1    gets the ECHO back: round trip 1.5 ms  [host1-3622e93a-1]
+```
+
+Your times and IDs will differ. Then follow one probe hop by hop, still in terminal 2:
+
+```bash
+python -m scripts.trace logs/demo 2
+```
+
+### 6. Stop
+
+Press **Ctrl-C in terminal 1**. It stops every router and host2 and prints `Network stopped`. The logs stay in `logs/demo/`.
+
+## Common Problems
+
+| You see | Fix |
+|---|---|
+| `No module named 'scripts'` or `'src'` | Run the two lines from [step 3](#3-in-every-new-terminal) in that terminal. |
+| `No module named 'pytest'` or `'matplotlib'` | The environment isn't active (`source .venv/bin/activate`), or setup was skipped ([step 2](#2-one-time-setup)). |
+| `exited with code 2 before starting`, or `Address already in use` | An old router or host is still running. Stop it with `pkill -f "src.(router|host)"`, then try again. |
+| `... already exists; pick another --run-id or add --replace` | That run ID was used before. Add `--replace`, or pick a new `--run-id`. |
+| Terminal 2 prints answers, but terminal 1 shows nothing | Both terminals must use the same `--run-id`. |
+| `0/3 probes answered` | The network isn't running. Start terminal 1 first and wait for its `started` lines. |
+
+## Running the Network
+
+### Live view (two terminals)
+
+`scripts.demo_net` is the easiest way to run the network, as in [Quick Start](#5-watch-the-network-run). It starts the four routers and host2 from one terminal and prints readable lines for every device's events, including host1's when host1 uses the same `--run-id`.
+
+| Option | Effect |
+|---|---|
+| `--run-id NAME` | Name of the run; logs go to `logs/NAME/`. Default `demo`. |
+| `--replace` | Delete an earlier run's logs with the same name first. |
+| `--config FILE` | Topology to use. Default `config/topology_upper.json` (through routerB both ways). |
+| `--link A-B --loss RATE --delay-ms MS` | Add loss (0 to 1) and one-way delay to one link. |
+| `--drop-rule ROUTER:RULE` | Make one router drop chosen packets ([forced drop rules](#forced-drop-rules)). |
+| `--seed N` | Seed for random loss; router i gets `N × 10 + i`. Default 0. |
+| `--all` | Also show each router's receive, queue and send steps. |
+
+host1 only needs its own address and gateway, which every config file shares, so terminal 2 doesn't need `--config`.
+
+### Tracing one packet
+
+List every probe in a run and how it ended:
+
+```bash
+python -m scripts.trace logs/demo
+```
+
+Follow probe 2 hop by hop, with timings:
+
+```bash
+python -m scripts.trace logs/demo 2
+```
+
+The trace lists each step with its time since the probe was sent, then the whole path, for example `host1 → routerA → routerB → routerD → host2 → routerD → routerB → routerA → host1`. A lost packet ends at the router that dropped it, with the reason. It works on any run folder, including those under `results/`.
+
+### By hand (six terminals)
+
+Each device can also be started on its own. Do [step 3](#3-in-every-new-terminal) in each terminal, then run one command per terminal, routers and host2 first:
+
+```bash
+python -m src.router --name routerA --config config/topology_upper.json
+python -m src.router --name routerB --config config/topology_upper.json
+python -m src.router --name routerC --config config/topology_upper.json
+python -m src.router --name routerD --config config/topology_upper.json
+python -m src.host --name host2 --config config/topology_upper.json
+python -m src.host --name host1 --probe host2 --count 3 --timeout 2 --config config/topology_upper.json
+```
+
+Each process prints its own events as JSON lines. Stop the routers and host2 with Ctrl-C in each terminal. The probing host exits on its own and prints `N/M probes answered`. Its exit code is 0 only if every probe was answered. Add the same `--run-id` to every command to group the logs in one folder. For the lower path, use `config/topology_lower.json`. Host2 can also probe host1 by swapping the roles.
+
+## Demo Scenarios
+
+Each scenario uses the [live view](#live-view-two-terminals): a terminal 1 command that starts the network, and terminal 2 commands that send traffic. Scenarios with the same run ID share one network. For the others, press Ctrl-C in terminal 1 and start it again with the new command. Every output below was produced by running these commands. Times and IDs will differ.
+
+### Probe and echo
+
+**Terminal 1:**
+
+```bash
+python -m scripts.demo_net --run-id demo --replace
+```
+
+**Terminal 2:**
+
+```bash
+python -m src.host --name host1 --probe host2 --count 3 --run-id demo
+```
+
+The output is in [Quick Start](#5-watch-the-network-run). host2 answers each `PROBE` with an `ECHO` carrying the same message ID and payload. host1 accepts an echo only if the ID, the sender and the payload all match, then logs `echo_received` with `rtt_ms`. An echo whose payload differs is logged as `echo_payload_mismatch` and ignored. By default probes carry `probe-0001`, `probe-0002`, and so on (always 10 bytes). `--payload` sets a fixed payload instead.
+
+### Unknown destination
+
+With the `demo` network still running, probe routerB. It's a device in the config, but no router has a forwarding entry for it:
+
+**Terminal 2:**
+
+```bash
+python -m src.host --name host1 --probe routerB --timeout 1 --run-id demo
+```
+
+```text
+14:44:47.868  routerA  DROPS PROBE host1→routerB: unknown_destination  [host1-bf3f30cc-1]
+14:44:48.869  host1    TIMEOUT: no echo within 1.0 s  [host1-bf3f30cc-1]
+```
+
+A name that isn't in the config at all, such as `hostZ`, is rejected by host1 before anything is sent.
+
+### Invalid packet
+
+With the `demo` network still running, send bytes that aren't a packet to routerA's port (5101):
+
+**Terminal 2:**
+
+```bash
+python -c "import socket; socket.socket(socket.AF_INET, socket.SOCK_DGRAM).sendto(b'not a packet', ('127.0.0.1', 5101))"
+```
+
+```text
+14:44:48.914  routerA  DROPS a malformed packet: Invalid JSON packet
+```
+
+routerA keeps running.
+
+### Loss and delay on one link
+
+Restart terminal 1 with 80 ms delay each way and 30% loss on routerB–routerD:
+
+**Terminal 1:**
+
+```bash
+python -m scripts.demo_net --run-id lossy --replace --link routerB-routerD --delay-ms 80 --loss 0.3 --seed 4
+```
+
+**Terminal 2:**
+
+```bash
+python -m src.host --name host1 --probe host2 --count 4 --interval 0.3 --timeout 1 --run-id lossy
+```
+
+```text
+14:44:50.731  host1    gets the ECHO back: round trip 165.8 ms  [host1-9956f28f-1]
+14:44:51.036  routerB  DROPS PROBE on the link to routerD (random loss 30%)  [host1-9956f28f-2]
+14:44:52.037  host1    TIMEOUT: no echo within 1.0 s  [host1-9956f28f-2]
+14:44:52.505  host1    gets the ECHO back: round trip 166.6 ms  [host1-9956f28f-3]
+14:44:52.977  host1    gets the ECHO back: round trip 166.4 ms  [host1-9956f28f-4]
+```
+
+The round trip is about twice the delay plus a few milliseconds. The 30% loss rate makes a drop likely within four probes. With seed 4 and these commands, probe 2 is the one lost every time.
+
+### Forced drop of one packet
+
+Restart terminal 1 with a rule that makes routerB drop the second probe, once:
+
+**Terminal 1:**
+
+```bash
+python -m scripts.demo_net --run-id forced --replace --drop-rule "routerB:type=PROBE,skip=1"
+```
+
+**Terminal 2:**
+
+```bash
+python -m src.host --name host1 --probe host2 --count 3 --interval 0.3 --timeout 1 --run-id forced
+```
+
+```text
+14:44:54.293  host1    gets the ECHO back: round trip 1.8 ms  [host1-cd63d51e-1]
+14:44:54.599  routerB  DROPS PROBE on the link to routerD (forced rule type=PROBE,skip=1,count=1)  [host1-cd63d51e-2]
+14:44:55.600  host1    TIMEOUT: no echo within 1.0 s  [host1-cd63d51e-2]
+14:44:55.905  host1    gets the ECHO back: round trip 2.2 ms  [host1-cd63d51e-3]
+```
+
+Terminal 2 prints `2/3 probes answered`.
+
+### Forwarding loop
+
+Restart terminal 1 with the loop config, then send a probe to routerD with a small hop limit:
+
+**Terminal 1:**
+
+```bash
+python -m scripts.demo_net --run-id loop --replace --config config/topology_loop.json
+```
+
+**Terminal 2:**
+
+```bash
+python -m src.host --name host1 --probe routerD --hop-limit 6 --timeout 1 --run-id loop
+```
+
+```text
+14:43:29.175  host1    sends PROBE host1→routerD to routerA (hop limit 6)
+14:43:29.175  routerA  forwards PROBE host1→routerD to routerB, hop limit now 5
+14:43:29.175  routerB  forwards PROBE host1→routerD to routerA, hop limit now 4
+14:43:29.176  routerA  forwards PROBE host1→routerD to routerB, hop limit now 3
+14:43:29.176  routerB  forwards PROBE host1→routerD to routerA, hop limit now 2
+14:43:29.176  routerA  forwards PROBE host1→routerD to routerB, hop limit now 1
+14:43:29.176  routerB  DROPS PROBE host1→routerD: hop_limit_exhausted
+14:43:30.176  host1    TIMEOUT: no echo within 1.0 s
+```
+
+In this config, routerA and routerB send packets for routerD to each other, so the probe bounces until its hop limit runs out. The validator rejects loops on the host1↔host2 routes in `paths`, so the loop uses routerD as the destination instead. Traffic between the hosts is routed normally in this config.
 
 ## Packet Format
 
@@ -58,7 +333,7 @@ Every link in the config has a loss rate (`loss`, 0 to 1) and a one-way delay (`
 
 **Hosts send straight to their gateway router without loss or delay.** So host1→routerA and host2→routerD are never lossy or delayed, but routerA→host1 and routerD→host2 can be.
 
-All links in the committed configs have 0 loss and 0 ms delay. Experiments set loss and delay on one link at run time (see [Experiments](#experiments)).
+All links in the committed configs have 0 loss and 0 ms delay. The live view and the experiments set loss and delay on one link at run time.
 
 ### Forced drop rules
 
@@ -68,15 +343,14 @@ A rule drops chosen packets a fixed number of times, so a test can lose one spec
 python -m src.router --name routerB --drop-rule "type=PROBE,skip=1"
 ```
 
-A rule matches on any of `message_id`, `type`, `src`, `dst` and `next_hop` (the neighbor the packet is about to be sent to). `skip=N` lets the first N matching packets through, and `count=N` drops the next N (default 1). After that, matching packets go through again, so a retransmission with the same ID is delivered. `--drop-rule` can be given more than once.
+A rule matches on any of `message_id`, `type`, `src`, `dst` and `next_hop` (the neighbor the packet is about to be sent to). `skip=N` lets the first N matching packets through, and `count=N` drops the next N (default 1). After that, matching packets go through again, so a retransmission with the same ID is delivered. `--drop-rule` can be given more than once. The live view and the launcher take the same rule prefixed with a router name, for example `routerB:type=PROBE,skip=1`.
 
 ## Logging
 
-Every host and router writes one JSON object per event, both to the terminal and to `logs/<run-id>/<device>.jsonl`:
+Every host and router writes one JSON object per event, both to the terminal and to `logs/<run-id>/<device>.jsonl`. For example, this router writes `logs/trial-3/routerA.jsonl`:
 
 ```bash
 python -m src.router --name routerA --run-id trial-3
-# writes logs/trial-3/routerA.jsonl
 ```
 
 `--run-id` defaults to `default` and may use letters, digits, `.`, `_` and `-`. `--log-dir` changes the `logs` folder. Every record has `run_id`, `device`, `timestamp` and `event`, plus the packet's `message_id`, `type`, `src`, `dst` and `hop_limit` when the event concerns a packet. Records with the same `run_id` and `message_id` follow one packet across devices.
@@ -132,71 +406,6 @@ The last three are generated from `config/topology.json` by:
 python -m scripts.make_routes
 ```
 
-## Running the Network by Hand
-
-Each host and router runs as a separate process. For the upper path, run each command in its own terminal:
-
-```bash
-python -m src.router --name routerA --config config/topology_upper.json
-python -m src.router --name routerB --config config/topology_upper.json
-python -m src.router --name routerC --config config/topology_upper.json
-python -m src.router --name routerD --config config/topology_upper.json
-python -m src.host --name host2 --config config/topology_upper.json
-python -m src.host --name host1 --probe host2 --count 3 --timeout 2 --config config/topology_upper.json
-```
-
-Stop the routers and host2 with Ctrl-C. The probing host exits on its own and prints `N/M probes answered` to standard error. Its exit code is 0 only if every probe was answered. Add the same `--run-id` to every command to group the logs. For the lower path, use `config/topology_lower.json`. Host2 can also probe host1 by swapping the roles.
-
-## Demo Scenarios
-
-Each demo starts the six processes above unless it says otherwise. Every expected log line below was produced by running the command.
-
-**Probe and echo.** host2 answers each `PROBE` with an `ECHO` carrying the same message ID and payload. host1 accepts an echo only if the ID, the sender and the payload all match, then logs `echo_received` with `rtt_ms`. An echo whose payload differs is logged as `echo_payload_mismatch` and ignored. By default probes carry `probe-0001`, `probe-0002`, and so on (always 10 bytes). `--payload` sets a fixed payload instead.
-
-**Forwarding loop.** Start the four routers with `--config config/topology_loop.json`, then:
-
-```bash
-python -m src.host --name host1 --probe routerD --hop-limit 6 --config config/topology_loop.json
-```
-
-routerA and routerB send packets for routerD to each other, so the probe bounces until its hop limit runs out:
-
-```text
-routerA forward hop_limit 5 -> routerB
-routerB forward hop_limit 4 -> routerA
-routerA forward hop_limit 3 -> routerB
-routerB forward hop_limit 2 -> routerA
-routerA forward hop_limit 1 -> routerB
-routerB drop    reason hop_limit_exhausted
-```
-
-The validator rejects loops on the host1↔host2 routes in `paths`, so the loop uses routerD as the destination instead. Traffic between the hosts is routed normally in this config.
-
-**Unknown destination.** routerB is a device in the config, but no router has a forwarding entry for it:
-
-```bash
-python -m src.host --name host1 --probe routerB --timeout 1
-```
-
-routerA logs `"event":"drop" ... "reason":"unknown_destination"` and the probe times out. A name that isn't in the config at all, such as `hostZ`, is rejected by the host before anything is sent.
-
-**Invalid packet.** Send bytes that aren't a packet to routerA's port:
-
-```bash
-python -c "import socket; socket.socket(socket.AF_INET, socket.SOCK_DGRAM).sendto(b'not a packet', ('127.0.0.1', 5101))"
-```
-
-routerA logs `"event":"drop","reason":"malformed_packet","detail":"Invalid JSON packet"` and keeps running.
-
-**Forced drop of one packet.** Start routerB with a drop rule, using the upper path so probes cross routerB:
-
-```bash
-python -m src.router --name routerB --config config/topology_upper.json --drop-rule "type=PROBE,skip=1"
-python -m src.host --name host1 --probe host2 --count 3 --interval 0.2 --timeout 0.5 --config config/topology_upper.json
-```
-
-routerB logs `drop_forced` for the second probe only. host1 logs `echo_received`, `probe_timeout`, `echo_received` and prints `2/3 probes answered`.
-
 ## Experiments
 
 ### Tools
@@ -215,7 +424,7 @@ python -m scripts.launch --config config/topology_upper.json --run-id demo-1 --s
     --link routerB-routerD --loss 0.05 --delay-ms 20 --count 20 --interval 0.2 --timeout 1.0
 ```
 
-Each run gets a folder holding the items below. It's `results/manual/demo-1/` here: single runs go under `results/manual/`, which git ignores, unless `--out` names another folder.
+It prints one line, such as `demo-1: 19/20 probes answered (5.907 s) -> results/manual/demo-1`. Each run gets a folder holding the items below. Single runs go under `results/manual/`, which git ignores, unless `--out` names another folder.
 
 - `config.json`: the exact topology used, with the link change applied
 - `run.json`: seed, router seeds, parameters, start and end times, the sender's result, and the commit the code ran from
@@ -225,9 +434,11 @@ The launcher refuses to overwrite an existing run folder. The run seed sets each
 
 ### Baseline
 
+The committed results are in `results/baseline/`. To repeat the experiment without overwriting them (about 1.5 minutes):
+
 ```bash
-python -m scripts.run_baseline
-python -m scripts.plot_results results/baseline
+python -m scripts.run_baseline --out results/manual/baseline-check
+python -m scripts.plot_results results/manual/baseline-check
 ```
 
 **Setup.** Upper path (`config/topology_upper.json`), so probes and echoes both cross the **routerB–routerD** link, the only link with loss or delay. The test varies 2 one-way delays (20 ms, 80 ms) × 2 loss rates (0%, 5%), 3 runs per condition, 20 probes per run, with seeds 1 to 12, one per run. These stay fixed: path, 10-byte payloads, 0.2 s between probes, and a 1 s timeout, which is about 6 times the slowest expected round trip. The raw logs are in `results/baseline/<run-id>/`.
@@ -267,6 +478,7 @@ The tests cover:
 - Network logging, log files and run IDs
 - Upper and lower routing paths
 - The launcher (including a full run on spare ports) and the metrics
+- The live demo view and the packet trace
 
 ## Module Interfaces
 
@@ -281,6 +493,7 @@ The tests cover:
 - `src/shutdown.py`: Stops a process cleanly on Ctrl-C or SIGTERM.
 - `scripts/make_routes.py`: Generates the upper, lower and loop configs.
 - `scripts/launch.py`, `scripts/run_baseline.py`, `scripts/metrics.py`, `scripts/plot_results.py`: Experiment tools.
+- `scripts/demo_net.py`, `scripts/trace.py`: Live demo view and packet tracing.
 
 ## Track B
 
