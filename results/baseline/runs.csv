@@ -1,0 +1,13 @@
+run_id,condition,seed,link,loss,delay_ms,probes,answered,timeouts,success_fraction,rtt_mean_ms,rtt_sd_ms,rtt_min_ms,rtt_median_ms,rtt_max_ms,unexpected_echoes,drops_injected,drops_forced,drops_other,sender_exit_code,complete
+baseline-d20-l0-s1,"delay 20 ms, loss 0%",1,routerB-routerD,0.0,20,20,20,0,1.0,45.842,1.257,43.239,45.77,48.179,0,0,0,0,0,True
+baseline-d20-l0-s2,"delay 20 ms, loss 0%",2,routerB-routerD,0.0,20,20,20,0,1.0,83.71,164.466,43.769,46.388,782.351,0,0,0,0,0,True
+baseline-d20-l0-s3,"delay 20 ms, loss 0%",3,routerB-routerD,0.0,20,20,20,0,1.0,45.779,1.019,43.138,46.147,47.044,0,0,0,0,0,True
+baseline-d20-l5-s4,"delay 20 ms, loss 5%",4,routerB-routerD,0.05,20,20,18,2,0.9,45.49,1.02,43.52,45.776,47.026,0,2,0,0,1,True
+baseline-d20-l5-s5,"delay 20 ms, loss 5%",5,routerB-routerD,0.05,20,20,19,1,0.95,46.425,3.643,43.192,45.825,60.524,0,1,0,0,1,True
+baseline-d20-l5-s6,"delay 20 ms, loss 5%",6,routerB-routerD,0.05,20,20,19,1,0.95,45.59,1.338,43.289,45.666,48.406,0,1,0,0,1,True
+baseline-d80-l0-s7,"delay 80 ms, loss 0%",7,routerB-routerD,0.0,80,20,20,0,1.0,165.245,0.875,163.465,165.048,166.815,0,0,0,0,0,True
+baseline-d80-l0-s8,"delay 80 ms, loss 0%",8,routerB-routerD,0.0,80,20,20,0,1.0,166.754,3.331,163.356,166.091,180.166,0,0,0,0,0,True
+baseline-d80-l0-s9,"delay 80 ms, loss 0%",9,routerB-routerD,0.0,80,20,20,0,1.0,167.52,7.394,163.867,165.947,198.799,0,0,0,0,0,True
+baseline-d80-l5-s10,"delay 80 ms, loss 5%",10,routerB-routerD,0.05,80,20,19,1,0.95,166.302,1.334,163.384,166.513,168.345,0,1,0,0,1,True
+baseline-d80-l5-s11,"delay 80 ms, loss 5%",11,routerB-routerD,0.05,80,20,15,5,0.75,166.513,1.029,163.537,166.478,168.021,0,5,0,0,1,True
+baseline-d80-l5-s12,"delay 80 ms, loss 5%",12,routerB-routerD,0.05,80,20,18,2,0.9,165.782,1.883,163.823,165.176,170.599,0,2,0,0,1,True

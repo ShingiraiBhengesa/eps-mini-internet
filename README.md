@@ -234,18 +234,19 @@ python -m scripts.plot_results results/baseline
 
 **Results** (`results/baseline/conditions.csv`; RTT pooled over all answered probes):
 
-| Condition | Probes | Answered | Success (± SD across runs) | RTT mean ± SD | Timeouts |
-|---|---|---|---|---|---|
-| 20 ms, 0% loss | 60 | 60 | 100.0% (± 0.0) | 46.4 ± 1.4 ms | 0 |
-| 20 ms, 5% loss | 60 | 56 | 93.3% (± 2.9) | 46.3 ± 1.3 ms | 4 |
-| 80 ms, 0% loss | 60 | 60 | 100.0% (± 0.0) | 166.0 ± 1.1 ms | 0 |
-| 80 ms, 5% loss | 60 | 52 | 86.7% (± 10.4) | 166.2 ± 1.2 ms | 8 |
+| Condition | Probes | Answered | Success (± SD across runs) | RTT mean ± SD | RTT median | Timeouts |
+|---|---|---|---|---|---|---|
+| 20 ms, 0% loss | 60 | 60 | 100.0% (± 0.0) | 58.4 ± 95.1 ms | 46.2 ms | 0 |
+| 20 ms, 5% loss | 60 | 56 | 93.3% (± 2.9) | 45.8 ± 2.3 ms | 45.7 ms | 4 |
+| 80 ms, 0% loss | 60 | 60 | 100.0% (± 0.0) | 166.5 ± 4.7 ms | 165.9 ms | 0 |
+| 80 ms, 5% loss | 60 | 52 | 86.7% (± 10.4) | 166.2 ± 1.5 ms | 166.4 ms | 8 |
 
 ![Baseline results](results/baseline/baseline.png)
 
 **Reading the results.**
 
-- **Round-trip time** is twice the link delay plus about 6 ms. The 6 ms is the cost of six router hops (three each way) in Python, including writing every log line. Loss doesn't change the round-trip time of the probes that get through.
+- **Round-trip time** is twice the link delay plus about 6 ms (see the medians). The 6 ms is the cost of six router hops (three each way) in Python, including writing every log line. Loss doesn't change the round-trip time of the probes that get through.
+- **One outlier.** Probe 13 of `baseline-d20-l0-s2` took 782 ms. Its log trace shows 470 ms passing inside routerA between `received` and `forward`, steps that normally take well under a millisecond, and routerD stalled briefly at the same moment. That points to the computer pausing the processes, not to the configured delay or the forwarding code. The probe is kept: it raises that condition's mean to 58.4 ms and SD to 95.1 ms, while its median (46.2 ms) matches the 20 ms, 5% loss condition. Smaller pauses of the same kind explain the 80 ms, 0% loss SD of 4.7 ms (two probes at 180 and 199 ms).
 - **Loss** applies in both directions, so a probe succeeds with probability 0.95² ≈ 90.25%. Across both delay settings, 12 of 120 lossy probes failed (90.0% success). The gap between 93.3% and 86.7% comes from 20-probe samples, not from the delay: one 80 ms run (seed 11) lost 5 of 20.
 - **Every timeout matches exactly one `drop_injected` event** on routerB or routerD, and no run was incomplete. Repeating the matrix with the same seeds lost exactly the same probes in every run.
 

@@ -1,0 +1,1 @@
+{"run_id":"baseline-d80-l0-s9","device":"routerC","timestamp":1794512464.02269,"event":"started","endpoint":"127.0.0.1:5103","seed":92,"links":[{"neighbor":"routerA","loss":0.0,"delay_ms":0},{"neighbor":"routerD","loss":0.0,"delay_ms":0}],"drop_rules":[]}
