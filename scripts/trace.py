@@ -1,11 +1,12 @@
 """Follow one packet through every device's log, hop by hop.
 
-    python -m scripts.trace logs/demo          list the probes in a run
-    python -m scripts.trace logs/demo 2        trace probe number 2
+    python -m scripts.trace logs/demo          list the probes and DATA messages in a run
+    python -m scripts.trace logs/demo 2        trace message number 2
     python -m scripts.trace logs/demo host1-3a3e3393-2
 
 The folder is a run's log folder: LOG_DIR/RUN_ID for hand-run demos, or a
-results/... run folder made by the launcher.
+results/... run folder made by the launcher. A Track B message that was
+resent is shown as one path per attempt.
 """
 
 import argparse
@@ -13,6 +14,9 @@ import sys
 from pathlib import Path
 
 from scripts.metrics import read_jsonl
+from src.reliable import parse_message_id
+
+DROP_EVENTS = ("drop", "drop_injected", "drop_forced")
 
 
 def is_router(device):
@@ -35,10 +39,75 @@ def percent(value):
     return f"{value * 100:g}%"
 
 
+def label(record):
+    """Packet type, plus the message number for Track B DATA and ACK."""
+    kind = record.get("type", "")
+    parsed = parse_message_id(record.get("message_id") or "")
+    if kind in ("DATA", "ACK") and parsed:
+        return f"{kind} #{parsed[2]}"
+    return kind
+
+
+def count(n, word):
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
+def describe_track_b(record):
+    """Plain-language text for Track B sender and receiver events, else None."""
+    event, get = record.get("event"), record.get
+
+    if event == "transfer_started":
+        if get("mode") == "besteffort":
+            return (f"starts a best-effort transfer: {get('messages')} messages to "
+                    f"{get('dst')}, at most {get('rate'):g} per second, no ACKs")
+        return (f"starts a stop-and-wait transfer: {get('messages')} messages to "
+                f"{get('dst')}, {get('timeout_s'):g} s ACK timeout, "
+                f"up to {get('retries')} resends each")
+    if event == "retransmit":
+        return f"RESENDS DATA #{get('seq')} (attempt {get('attempt')})"
+    if event == "ack_received":
+        return f"gets the ACK for #{get('seq')} after {get('rtt_ms'):.1f} ms"
+    if event == "ack_timeout":
+        return f"TIMEOUT: no ACK for #{get('seq')} within {get('timeout_s'):g} s"
+    if event == "ack_ignored":
+        return f"ignores an ACK: {get('reason')}"
+    if event == "transfer_failed":
+        return f"GIVES UP on #{get('seq')} after {get('attempts')} attempts"
+    if event == "transfer_done":
+        if get("mode") == "besteffort":
+            return f"done: sent {get('messages')} messages in {get('elapsed_s'):.2f} s"
+        if get("success"):
+            return (f"done: {get('acked')}/{get('messages')} acknowledged, "
+                    f"{count(get('retransmissions'), 'resend')}, {get('elapsed_s'):.2f} s")
+        return (f"FAILED at #{get('failed_at')}: {get('acked')}/{get('messages')} "
+                f"acknowledged, {get('elapsed_s'):.2f} s")
+    if event == "delivered":
+        return f"delivers DATA #{get('seq')} to the application"
+    if event == "duplicate":
+        action = "ACKs it again" if get("acked") else "ignored"
+        return f"gets DATA #{get('seq')} again: not delivered twice, {action}"
+    if event == "dropped_out_of_order":
+        return f"ignores DATA #{get('seq')}: waiting for #{get('expected')}"
+    if event == "transfer_received":
+        return (f"has all {get('expected')} messages; keeps answering for "
+                f"{get('linger_s'):g} s in case the last ACK was lost")
+    if event == "receiver_done":
+        reasons = {"linger_over": "waiting time over", "observation_over": "observation time over",
+                   "stopped": "stopped"}
+        total = f"/{get('expected')}" if get("expected") else ""
+        return (f"stops ({reasons.get(get('reason'), get('reason'))}): "
+                f"delivered {get('delivered')}{total}, {count(get('duplicates', 0), 'duplicate')}")
+    if event == "dropped_unexpected_ack":
+        return "ignores an ACK nothing is waiting for"
+    if event == "dropped_bad_data_id":
+        return "ignores DATA with an unreadable message ID"
+    return None
+
+
 def describe(record):
     """One plain-language line for a log record."""
     event = record.get("event", "?")
-    kind = record.get("type", "")
+    kind = label(record)
     hop = record.get("hop_limit")
     next_hop = record.get("next_hop")
 
@@ -83,41 +152,68 @@ def describe(record):
     if event == "dropped_malformed":
         return f"ignores a malformed packet: {record.get('reason')}"
     if event == "dropped_unhandled_type":
-        return f"ignores {kind}: hosts only handle PROBE and ECHO"
+        return f"ignores {kind}: hosts don't handle this type"
+
+    text = describe_track_b(record)
+    if text is not None:
+        return text
 
     extra = {k: v for k, v in record.items()
              if k not in ("run_id", "device", "timestamp", "event")}
     return f"{event} {extra}" if extra else event
 
 
-DROP_EVENTS = ("drop", "drop_injected", "drop_forced")
-
-
-def probes(records):
-    """Probe IDs in the order they were sent, with how each one ended."""
-    result, dropped = {}, {}
+def messages(records):
+    """Probes and DATA messages in the order first sent, with how each ended."""
+    info = {}
 
     for r in records:
-        mid, event = r.get("message_id"), r.get("event")
-        if event == "sent" and r.get("type") == "PROBE" and not is_router(r["device"]):
-            result.setdefault(mid, "no result logged")
-        elif mid in result:
-            if event in DROP_EVENTS:
-                dropped[mid] = f"{r['device']}, {r.get('reason') or event}"
-            elif event == "echo_received":
-                result[mid] = f"answered in {r['rtt_ms']:.1f} ms"
-            elif event == "probe_timeout":
-                result[mid] = "timed out"
+        mid, event, device = r.get("message_id"), r.get("event"), r.get("device", "")
+        if mid is None:
+            continue
+        if event == "sent" and r.get("type") in ("PROBE", "DATA") and device == r.get("src"):
+            entry = info.setdefault(mid, {"kind": r["type"], "attempts": 0, "drops": [],
+                                          "result": None, "delivered": False})
+            entry["attempts"] += 1
+            continue
+        entry = info.get(mid)
+        if entry is None:
+            continue
+        if event in DROP_EVENTS:
+            entry["drops"].append(f"{device}, {r.get('reason') or event}")
+        elif event == "echo_received":
+            entry["result"] = f"answered in {r['rtt_ms']:.1f} ms"
+        elif event == "probe_timeout":
+            entry["result"] = "timed out"
+        elif event == "ack_received":
+            entry["result"] = "acknowledged"
+        elif event == "transfer_failed":
+            entry["result"] = "gave up"
+        elif event == "delivered":
+            entry["delivered"] = True
 
-    return {
-        mid: outcome + (f" (dropped at {dropped[mid]})" if mid in dropped else "")
-        for mid, outcome in result.items()
-    }
+    outcomes = {}
+    for mid, entry in info.items():
+        if entry["kind"] == "PROBE":
+            text = entry["result"] or "no result logged"
+        else:
+            parts = (["delivered"] if entry["delivered"] else []) + \
+                    ([entry["result"]] if entry["result"] else [])
+            text = " and ".join(parts) or "lost"
+            if entry["attempts"] > 1:
+                text += f" after {entry['attempts']} attempts"
+        if entry["drops"]:
+            text += " (dropped at " + "; ".join(entry["drops"]) + ")"
+        outcomes[mid] = text
+    return outcomes
+
+
+probes = messages  # earlier name, kept for callers
 
 
 def pick_message(records, wanted):
-    """Resolve a full message ID or a probe number such as '2'."""
-    ids = list(probes(records))
+    """Resolve a full message ID or a message number such as '2'."""
+    ids = list(messages(records))
     if wanted in ids or any(r.get("message_id") == wanted for r in records):
         return wanted
     matches = [mid for mid in ids if mid.rsplit("-", 1)[-1] == wanted]
@@ -125,26 +221,39 @@ def pick_message(records, wanted):
         return matches[0]
     if matches:
         raise LookupError(
-            f"probe {wanted} was sent more than once in this folder; use the full ID: "
+            f"message {wanted} was sent more than once in this folder; use the full ID: "
             + ", ".join(matches)
         )
     raise LookupError(f"no packet {wanted!r} in this folder")
 
 
 def trace(records, message_id):
-    """The packet's events in time order, plus its path as a list of devices."""
+    """The packet's events in time order, and its path for each attempt.
+
+    Each path is {"devices": [...], "dropped": bool}. A probe has one
+    attempt; a Track B message has one per time the sender sent it.
+    """
     events = [r for r in records if r.get("message_id") == message_id]
     if not events:
         return [], []
 
-    path = [events[0]["device"]]
-    for r in events[1:]:
-        if r.get("event") == "received" and r["device"] != path[-1]:
-            path.append(r["device"])
-    return events, path
+    origin = events[0]["device"]
+    paths = []
+    for r in events:
+        new_attempt = (r.get("event") == "sent" and r["device"] == origin
+                       and r.get("src") == origin)
+        if new_attempt or not paths:
+            paths.append({"devices": [r["device"]], "dropped": False})
+            continue
+        path = paths[-1]
+        if r.get("event") == "received" and r["device"] != path["devices"][-1]:
+            path["devices"].append(r["device"])
+        if r.get("event") in DROP_EVENTS:
+            path["dropped"] = True
+    return events, paths
 
 
-def format_trace(events, path):
+def format_trace(events, paths):
     start = events[0]["timestamp"]
     lines = []
     for r in events:
@@ -153,11 +262,11 @@ def format_trace(events, path):
         offset = (r["timestamp"] - start) * 1000
         lines.append(f"{offset:+9.1f} ms  {r['device']:<8} {describe(r)}")
 
-    ending = ""
-    if any(r.get("event") in DROP_EVENTS for r in events):
-        ending = "  ✗ dropped"
     lines.append("")
-    lines.append("path: " + " → ".join(path) + ending)
+    for number, path in enumerate(paths, 1):
+        prefix = "path" if len(paths) == 1 else f"attempt {number}"
+        ending = "  ✗ dropped" if path["dropped"] else ""
+        lines.append(f"{prefix}: " + " → ".join(path["devices"]) + ending)
     return "\n".join(lines)
 
 
@@ -165,7 +274,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Follow one packet through a run's logs.")
     parser.add_argument("folder", help="a run's log folder, e.g. logs/demo")
     parser.add_argument("message", nargs="?",
-                        help="probe number (e.g. 2) or full message ID; omit to list probes")
+                        help="message number (e.g. 2) or full message ID; omit to list them")
     args = parser.parse_args(argv)
 
     records = load_records(args.folder)
@@ -174,11 +283,11 @@ def main(argv=None):
         return 2
 
     if args.message is None:
-        found = probes(records)
+        found = messages(records)
         if not found:
-            print("No probes in this folder.")
+            print("No probes or DATA messages in this folder.")
         for mid, outcome in found.items():
-            print(f"{mid:<24} {outcome}")
+            print(f"{mid:<28} {outcome}")
         return 0
 
     try:
@@ -187,9 +296,9 @@ def main(argv=None):
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    events, path = trace(records, message_id)
+    events, paths = trace(records, message_id)
     print(f"Packet {message_id}\n")
-    print(format_trace(events, path))
+    print(format_trace(events, paths))
     return 0
 
 
