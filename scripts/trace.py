@@ -57,6 +57,10 @@ def describe_track_b(record):
     event, get = record.get("event"), record.get
 
     if event == "transfer_started":
+        if get("mode") == "gobackn":
+            return (f"starts a Go-Back-N transfer: {get('messages')} messages to "
+                    f"{get('dst')}, window {get('window')}, {get('timeout_s'):g} s timeout, "
+                    f"gives up after {get('retries')} timeouts in a row")
         if get("mode") == "besteffort":
             return (f"starts a best-effort transfer: {get('messages')} messages to "
                     f"{get('dst')}, at most {get('rate'):g} per second, no ACKs")
@@ -66,9 +70,15 @@ def describe_track_b(record):
     if event == "retransmit":
         return f"RESENDS DATA #{get('seq')} (attempt {get('attempt')})"
     if event == "ack_received":
+        if (get("newly_acked") or 1) > 1:
+            return (f"gets a cumulative ACK through #{get('seq')}: "
+                    f"{get('newly_acked')} messages acknowledged at once")
         return f"gets the ACK for #{get('seq')} after {get('rtt_ms'):.1f} ms"
     if event == "ack_timeout":
-        return f"TIMEOUT: no ACK for #{get('seq')} within {get('timeout_s'):g} s"
+        text = f"TIMEOUT: no ACK for #{get('seq')} within {get('timeout_s'):g} s"
+        if get("in_flight"):
+            text += f"; going back to resend {count(get('in_flight'), 'message')}"
+        return text
     if event == "ack_ignored":
         return f"ignores an ACK: {get('reason')}"
     if event == "transfer_failed":
@@ -85,8 +95,13 @@ def describe_track_b(record):
         return f"delivers DATA #{get('seq')} to the application"
     if event == "duplicate":
         action = "ACKs it again" if get("acked") else "ignored"
+        if get("acked_through"):
+            action = f"ACKs #{get('acked_through')} again"
         return f"gets DATA #{get('seq')} again: not delivered twice, {action}"
     if event == "dropped_out_of_order":
+        if get("acked_through"):
+            return (f"discards DATA #{get('seq')}: waiting for #{get('expected')}, "
+                    f"ACKs #{get('acked_through')} again")
         return f"ignores DATA #{get('seq')}: waiting for #{get('expected')}"
     if event == "transfer_received":
         return (f"has all {get('expected')} messages; keeps answering for "
