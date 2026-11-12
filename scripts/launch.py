@@ -102,13 +102,17 @@ class Network:
     def __init__(
         self, config_path, run_id, log_dir, seed,
         responder="host2", drop_rules=(), python=sys.executable,
+        responder_args=None,
     ):
+        """responder=None starts no replying host at all. responder_args
+        replaces the default `-m src.host --name RESPONDER` program."""
         self.config_path = Path(config_path).resolve()
         self.run_id = run_id
         self.log_dir = Path(log_dir).resolve()
         self.run_dir = self.log_dir / run_id
         self.seed = seed
         self.responder = responder
+        self.responder_args = responder_args or ["-m", "src.host", "--name", responder]
         self.drop_rules = list(drop_rules)
         self.python = python
         self.procs = {}
@@ -136,12 +140,22 @@ class Network:
                     command += ["--drop-rule", rule]
             self._spawn(name, command)
 
-        self._spawn(self.responder, [
-            self.python, "-m", "src.host", "--name", self.responder,
-            *self.common_args(),
-        ])
+        if self.responder is not None:
+            self._spawn(self.responder, [
+                self.python, *self.responder_args, *self.common_args(),
+            ])
 
         self._wait_ready(ready_timeout)
+
+    def wait_for(self, name, timeout):
+        """Wait up to `timeout` seconds for one process to exit by itself."""
+        if name not in self.procs:
+            return True
+        try:
+            self.procs[name][0].wait(timeout=timeout)
+            return True
+        except subprocess.TimeoutExpired:
+            return False
 
     def _spawn(self, name, command):
         errors = open(self.run_dir / f"{name}.stderr.txt", "w", encoding="utf-8")
@@ -227,14 +241,9 @@ def relative_to_repo(path):
         return str(path)
 
 
-def run_experiment(
-    base_config, run_id, seed, out_dir,
-    link=None, loss=None, delay_ms=None,
-    count=20, interval=0.2, timeout=1.0, payload=None,
-    drop_rules=(), condition=None,
-    sender="host1", receiver="host2", python=sys.executable,
-):
-    """Run one probe experiment and return (run_dir, run metadata)."""
+def prepare_run(base_config, run_id, seed, out_dir, link, loss, delay_ms,
+                drop_rules, network_options):
+    """Create the run folder and its config; return (run_dir, network, meta)."""
     out_dir = Path(out_dir).resolve()
     run_dir = out_dir / run_id
     if run_dir.exists():
@@ -248,17 +257,14 @@ def run_experiment(
     config_path = run_dir / "config.json"
     config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
-    network = Network(
-        config_path, run_id, out_dir, seed,
-        responder=receiver, drop_rules=drop_rules, python=python,
-    )
+    network = Network(config_path, run_id, out_dir, seed,
+                      drop_rules=drop_rules, **network_options)
     rules_by_router = {}
     for router, rule in drop_rules:
         rules_by_router.setdefault(router, []).append(rule)
 
     meta = {
         "run_id": run_id,
-        "condition": condition,
         "seed": seed,
         "router_seeds": network.router_seeds(),
         "base_config": relative_to_repo(base_config),
@@ -267,31 +273,32 @@ def run_experiment(
         "delay_ms": delay_ms,
         "links": config["links"],
         "paths": config["paths"],
-        "sender": sender,
-        "receiver": receiver,
-        "count": count,
-        "interval_s": interval,
-        "timeout_s": timeout,
-        "payload": payload,
         "drop_rules": rules_by_router,
         "code_version": code_version(),
         "python": platform.python_version(),
     }
+    return run_dir, network, meta
 
+
+def execute_run(run_dir, network, meta, command, timeout, responder_wait=0.0):
+    """Run the sender inside the network, then write run.json.
+
+    responder_wait gives the replying host that many seconds to finish by
+    itself after the sender exits (a Track B receiver lingers, then stops).
+    """
     started = time.time()
     meta["started_at"] = datetime.fromtimestamp(started, timezone.utc).isoformat()
-    command = probe_command(
-        python, config_path, run_id, out_dir, sender, receiver,
-        count, interval, timeout, payload,
-    )
 
     try:
         with network:
             result = subprocess.run(
                 command, cwd=REPO_ROOT,
                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
-                timeout=count * (interval + timeout) + 30,
+                timeout=timeout,
             )
+            if responder_wait and network.responder is not None:
+                meta["receiver_exited_by_itself"] = network.wait_for(
+                    network.responder, responder_wait)
     except (LaunchError, subprocess.TimeoutExpired) as exc:
         # Keep a record of the failed attempt next to its logs.
         meta["launch_error"] = str(exc)
@@ -308,6 +315,89 @@ def run_experiment(
 
     (run_dir / "run.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     return run_dir, meta
+
+
+def run_experiment(
+    base_config, run_id, seed, out_dir,
+    link=None, loss=None, delay_ms=None,
+    count=20, interval=0.2, timeout=1.0, payload=None,
+    drop_rules=(), condition=None,
+    sender="host1", receiver="host2", python=sys.executable,
+):
+    """Run one probe experiment and return (run_dir, run metadata)."""
+    run_dir, network, meta = prepare_run(
+        base_config, run_id, seed, out_dir, link, loss, delay_ms, drop_rules,
+        {"responder": receiver, "python": python},
+    )
+    meta.update({
+        "kind": "probe",
+        "condition": condition,
+        "sender": sender,
+        "receiver": receiver,
+        "count": count,
+        "interval_s": interval,
+        "timeout_s": timeout,
+        "payload": payload,
+    })
+    command = probe_command(
+        python, network.config_path, run_id, network.log_dir, sender, receiver,
+        count, interval, timeout, payload,
+    )
+    return execute_run(run_dir, network, meta, command,
+                       timeout=count * (interval + timeout) + 30)
+
+
+def run_transfer(
+    base_config, run_id, seed, out_dir,
+    mode="stopwait", count=20, rate=20.0, timeout=0.5, retries=5,
+    linger=3.0, observe=None, transfer_id=None, start_receiver=True,
+    link=None, loss=None, delay_ms=None, drop_rules=(), condition=None,
+    sender="host1", receiver="host2", python=sys.executable,
+):
+    """Run one Track B transfer and return (run_dir, run metadata).
+
+    The receiver runs as `src.reliable receive --expect COUNT`, so it stops
+    by itself LINGER seconds after the last message, or OBSERVE seconds
+    after the first one. start_receiver=False leaves the destination host
+    down, to test an unreachable destination.
+    """
+    transfer_id = transfer_id or run_id
+    receiver_args = ["-m", "src.reliable", "receive", "--name", receiver,
+                     "--expect", str(count), "--linger", str(linger)]
+    if observe is not None:
+        receiver_args += ["--observe", str(observe)]
+
+    run_dir, network, meta = prepare_run(
+        base_config, run_id, seed, out_dir, link, loss, delay_ms, drop_rules,
+        {"responder": receiver if start_receiver else None,
+         "responder_args": receiver_args, "python": python},
+    )
+    meta.update({
+        "kind": "transfer",
+        "condition": condition,
+        "sender": sender,
+        "receiver": receiver,
+        "receiver_started": start_receiver,
+        "mode": mode,
+        "count": count,
+        "rate": rate,
+        "timeout_s": timeout,
+        "retries": retries,
+        "linger_s": linger,
+        "observe_s": observe,
+        "transfer_id": transfer_id,
+    })
+    command = [
+        python, "-m", "src.reliable", "send", "--name", sender, "--to", receiver,
+        "--mode", mode, "--count", str(count), "--rate", str(rate),
+        "--timeout", str(timeout), "--retries", str(retries),
+        "--transfer-id", transfer_id,
+        "--config", str(network.config_path), "--run-id", run_id,
+        "--log-dir", str(network.log_dir),
+    ]
+    worst_case = count * (1.0 / rate + timeout * (retries + 1))
+    return execute_run(run_dir, network, meta, command, timeout=worst_case + 30,
+                       responder_wait=linger + (observe or 0) + 2)
 
 
 def build_parser():
