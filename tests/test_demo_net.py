@@ -77,3 +77,15 @@ def test_cli_refuses_to_reuse_a_run_folder(tmp_path, capsys):
 
     assert main(["--log-dir", str(tmp_path), "--run-id", "demo"]) == 2
     assert "--replace" in capsys.readouterr().err
+
+
+def test_feed_colors_track_b_outcomes():
+    base = {"device": "host1", "timestamp": 1.0}
+    red, green = "\033[31m", "\033[32m"
+
+    assert red in feed_line(dict(base, event="ack_timeout", seq=3, timeout_s=0.5), color=True)
+    assert red in feed_line(dict(base, event="transfer_done", mode="stopwait", success=False,
+                                 failed_at=1, acked=0, messages=3, elapsed_s=1.2), color=True)
+    assert green in feed_line(dict(base, event="ack_received", seq=3, rtt_ms=1.2), color=True)
+    assert green in feed_line(dict(base, event="transfer_done", mode="stopwait", success=True,
+                                   acked=3, messages=3, retransmissions=0, elapsed_s=0.2), color=True)
