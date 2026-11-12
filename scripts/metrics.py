@@ -29,7 +29,7 @@ RUN_FIELDS = [
 CONDITION_FIELDS = [
     "condition", "link", "loss", "delay_ms", "runs", "seeds",
     "probes", "answered", "timeouts", "success_fraction", "success_sd",
-    "rtt_mean_ms", "rtt_sd_ms", "rtt_min_ms", "rtt_max_ms",
+    "rtt_mean_ms", "rtt_sd_ms", "rtt_median_ms", "rtt_min_ms", "rtt_max_ms",
     "drops_injected", "incomplete_runs",
 ]
 
@@ -152,6 +152,7 @@ def condition_metrics(runs):
             "success_sd": rounded(sd(fractions), 4),
             "rtt_mean_ms": rounded(statistics.fmean(rtts)) if rtts else None,
             "rtt_sd_ms": rounded(sd(rtts)) if rtts else None,
+            "rtt_median_ms": rounded(statistics.median(rtts)) if rtts else None,
             "rtt_min_ms": rounded(min(rtts)) if rtts else None,
             "rtt_max_ms": rounded(max(rtts)) if rtts else None,
             "drops_injected": sum(r["drops_injected"] for r in group),
@@ -178,7 +179,7 @@ def write_csv(path, fields, rows):
 def format_table(rows):
     header = (
         f"{'condition':<24} {'runs':>4} {'probes':>6} {'success':>8} "
-        f"{'± sd':>6} {'RTT ms':>8} {'± sd':>7} {'timeouts':>8}"
+        f"{'± sd':>6} {'RTT ms':>8} {'± sd':>7} {'median':>7} {'timeouts':>8}"
     )
     lines = [header, "-" * len(header)]
 
@@ -186,11 +187,12 @@ def format_table(rows):
         success = "-" if row["success_fraction"] is None else f"{row['success_fraction']:.1%}"
         rtt = "-" if row["rtt_mean_ms"] is None else f"{row['rtt_mean_ms']:.1f}"
         rtt_sd = "-" if row["rtt_sd_ms"] is None else f"{row['rtt_sd_ms']:.1f}"
+        median = "-" if row["rtt_median_ms"] is None else f"{row['rtt_median_ms']:.1f}"
         flag = f"  ({row['incomplete_runs']} incomplete)" if row["incomplete_runs"] else ""
         lines.append(
             f"{row['condition']:<24} {row['runs']:>4} {row['probes']:>6} "
             f"{success:>8} {row['success_sd']:>6.1%} {rtt:>8} {rtt_sd:>7} "
-            f"{row['timeouts']:>8}{flag}"
+            f"{median:>7} {row['timeouts']:>8}{flag}"
         )
     return "\n".join(lines)
 

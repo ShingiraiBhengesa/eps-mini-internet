@@ -5,7 +5,7 @@
 Writes ROOT/baseline.png with two panels that share the same x layout
 (delay groups, loss as color):
     left   share of probes answered: one dot per run, a bar at the pooled value
-    right  round-trip time: pooled mean with a +/- 1 SD whisker
+    right  round-trip time: every probe as a faint dot, plus pooled mean +/- 1 SD
 
 Requires matplotlib (see requirements.txt).
 """
@@ -139,7 +139,13 @@ def plot(root, out_name="baseline.png"):
             spread = statistics.stdev(values) if len(values) > 1 else 0.0
             top = max(top, mean + spread, max(values))
 
-            right.vlines(x, mean - spread, mean + spread, color=color,
+            # Every probe as a faint dot, spread evenly across a narrow band,
+            # so a single slow probe reads as one point, not as a trend.
+            spread_x = [x + (((i * 0.618) % 1) - 0.5) * 0.2 for i in range(len(values))]
+            right.scatter(spread_x, values, s=9, color=color, alpha=0.35,
+                          linewidth=0, zorder=2)
+
+            right.vlines(x, max(0.0, mean - spread), mean + spread, color=color,
                          linewidth=2, zorder=3)
             right.scatter([x], [mean], s=58, color=color, edgecolor=SURFACE,
                           linewidth=2, zorder=4)
@@ -148,10 +154,10 @@ def plot(root, out_name="baseline.png"):
                            ha="center", va="bottom",
                            color=INK_SECONDARY, fontsize=8.5)
 
-    right.set_ylim(0, top * 1.15)
+    right.set_ylim(0, top * 1.08)
     right.set_title("Round-trip time (ms)", loc="left", color=INK, fontsize=11,
                     fontweight="bold", pad=18)
-    right.text(0, 1.02, "Mean ± 1 SD of all answered probes (whisker hidden when SD < dot).",
+    right.text(0, 1.02, "Large dot and whisker: mean ± 1 SD. Faint dots: single probes.",
                transform=right.transAxes, color=INK_SECONDARY, fontsize=8.5)
 
     handles = [

@@ -89,6 +89,7 @@ def test_condition_metrics_pool_runs(tmp_path):
     assert c1["success_fraction"] == 0.75
     assert c1["success_sd"] == pytest.approx(0.3536, abs=1e-4)
     assert c1["rtt_mean_ms"] == pytest.approx(43.333, abs=1e-3)
+    assert c1["rtt_median_ms"] == 40.0
 
 
 def test_torn_last_line_is_skipped(tmp_path):
