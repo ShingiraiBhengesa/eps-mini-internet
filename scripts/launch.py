@@ -350,7 +350,7 @@ def run_experiment(
 def run_transfer(
     base_config, run_id, seed, out_dir,
     mode="stopwait", count=20, rate=20.0, timeout=0.5, retries=5,
-    linger=3.0, observe=None, transfer_id=None, start_receiver=True,
+    linger=3.0, observe=None, transfer_id=None, start_receiver=True, window=None,
     link=None, loss=None, delay_ms=None, drop_rules=(), condition=None,
     sender="host1", receiver="host2", python=sys.executable,
 ):
@@ -379,6 +379,7 @@ def run_transfer(
         "receiver": receiver,
         "receiver_started": start_receiver,
         "mode": mode,
+        "window": window if mode == "gobackn" else None,
         "count": count,
         "rate": rate,
         "timeout_s": timeout,
@@ -395,6 +396,8 @@ def run_transfer(
         "--config", str(network.config_path), "--run-id", run_id,
         "--log-dir", str(network.log_dir),
     ]
+    if mode == "gobackn" and window is not None:
+        command += ["--window", str(window)]
     worst_case = count * (1.0 / rate + timeout * (retries + 1))
     return execute_run(run_dir, network, meta, command, timeout=worst_case + 30,
                        responder_wait=linger + (observe or 0) + 2)

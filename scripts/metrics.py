@@ -202,21 +202,38 @@ def format_table(rows):
 # ---------------------------------------------------------------- Track B transfers
 
 TRANSFER_RUN_FIELDS = [
-    "run_id", "condition", "seed", "mode", "link", "loss", "delay_ms",
+    "run_id", "condition", "seed", "mode", "window", "link", "loss", "delay_ms",
     "messages", "delivered", "delivered_fraction", "full_sequence", "in_order",
-    "duplicates_at_receiver", "data_sent", "retransmissions",
+    "duplicates_at_receiver", "out_of_order_discards", "max_in_flight",
+    "data_sent", "retransmissions",
     "sender_success", "failed_at", "sender_elapsed_s", "delivery_time_s",
     "data_drops", "ack_drops", "receiver_stop", "sender_exit_code", "complete",
 ]
 
 TRANSFER_CONDITION_FIELDS = [
-    "condition", "mode", "link", "loss", "delay_ms", "runs", "seeds",
+    "condition", "mode", "window", "link", "loss", "delay_ms", "runs", "seeds",
     "messages", "delivered", "delivered_fraction", "delivered_sd",
     "full_sequence_runs", "retransmissions", "retransmissions_per_run",
-    "duplicates_at_receiver", "data_sent",
+    "duplicates_at_receiver", "out_of_order_discards", "max_in_flight", "data_sent",
     "delivery_time_mean_s", "delivery_time_sd_s",
     "sender_elapsed_mean_s", "sender_elapsed_sd_s", "incomplete_runs",
 ]
+
+
+def max_in_flight(sender_log):
+    """Most messages sent but not yet acknowledged at any moment."""
+    from src.reliable import parse_message_id
+
+    highest = acked = most = 0
+    for r in sender_log:
+        if r.get("event") == "sent" and r.get("type") == "DATA":
+            parsed = parse_message_id(r.get("message_id", ""))
+            if parsed:
+                highest = max(highest, parsed[2])
+                most = max(most, highest - acked)
+        elif r.get("event") == "ack_received":
+            acked = max(acked, r.get("acked_through") or r.get("seq") or 0)
+    return most
 
 
 def last_event(records, event):
@@ -257,6 +274,7 @@ def transfer_metrics(run_dir, meta):
         "condition": meta.get("condition") or meta["run_id"],
         "seed": meta.get("seed"),
         "mode": meta.get("mode"),
+        "window": meta.get("window"),
         "link": meta.get("link"),
         "loss": meta.get("loss"),
         "delay_ms": meta.get("delay_ms"),
@@ -266,6 +284,9 @@ def transfer_metrics(run_dir, meta):
         "full_sequence": unique == list(range(1, count + 1)),
         "in_order": order == sorted(order),
         "duplicates_at_receiver": sum(1 for r in receiver_log if r.get("event") == "duplicate"),
+        "out_of_order_discards": sum(1 for r in receiver_log
+                                     if r.get("event") == "dropped_out_of_order"),
+        "max_in_flight": None if meta.get("mode") == "besteffort" else max_in_flight(sender_log),
         "data_sent": sum(1 for r in sender_log
                          if r.get("event") == "sent" and r.get("type") == "DATA"),
         "retransmissions": done.get("retransmissions") if done else None,
@@ -304,6 +325,7 @@ def transfer_condition_metrics(runs):
         rows.append({
             "condition": label,
             "mode": first["mode"],
+            "window": first.get("window"),
             "link": first["link"],
             "loss": first["loss"],
             "delay_ms": first["delay_ms"],
@@ -317,6 +339,9 @@ def transfer_condition_metrics(runs):
             "retransmissions": retransmissions,
             "retransmissions_per_run": round(retransmissions / len(group), 2),
             "duplicates_at_receiver": sum(r["duplicates_at_receiver"] for r in group),
+            "out_of_order_discards": sum(r["out_of_order_discards"] for r in group),
+            "max_in_flight": max((r["max_in_flight"] for r in group
+                                  if r["max_in_flight"] is not None), default=None),
             "data_sent": sum(r["data_sent"] for r in group),
             "delivery_time_mean_s": delivery_mean,
             "delivery_time_sd_s": delivery_sd,
@@ -325,22 +350,25 @@ def transfer_condition_metrics(runs):
             "incomplete_runs": sum(1 for r in group if not r["complete"]),
         })
 
+    order = {"besteffort": 0, "stopwait": 1, "gobackn": 2}
     return sorted(rows, key=lambda r: (r["loss"] if r["loss"] is not None else -1,
-                                       r["mode"] or "", r["condition"]))
+                                       order.get(r["mode"], 9), r.get("window") or 0,
+                                       r["condition"]))
 
 
 def format_transfer_table(rows):
-    header = (f"{'condition':<28} {'runs':>4} {'delivered':>10} {'full seq':>8} "
-              f"{'resends/run':>11} {'dupes':>5} {'time s':>7} {'± sd':>6}")
+    header = (f"{'condition':<34} {'runs':>4} {'delivered':>10} {'full seq':>8} "
+              f"{'resends/run':>11} {'dupes':>5} {'in flight':>9} {'time s':>7} {'± sd':>6}")
     lines = [header, "-" * len(header)]
     for row in rows:
         time_s = "-" if row["delivery_time_mean_s"] is None else f"{row['delivery_time_mean_s']:.2f}"
         time_sd = "-" if row["delivery_time_sd_s"] is None else f"{row['delivery_time_sd_s']:.2f}"
         flag = f"  ({row['incomplete_runs']} incomplete)" if row["incomplete_runs"] else ""
+        in_flight = "-" if row.get("max_in_flight") is None else str(row["max_in_flight"])
         lines.append(
-            f"{row['condition']:<28} {row['runs']:>4} {row['delivered_fraction']:>10.1%} "
+            f"{row['condition']:<34} {row['runs']:>4} {row['delivered_fraction']:>10.1%} "
             f"{row['full_sequence_runs']:>4}/{row['runs']:<3} {row['retransmissions_per_run']:>11.1f} "
-            f"{row['duplicates_at_receiver']:>5} {time_s:>7} {time_sd:>6}{flag}"
+            f"{row['duplicates_at_receiver']:>5} {in_flight:>9} {time_s:>7} {time_sd:>6}{flag}"
         )
     return "\n".join(lines)
 
