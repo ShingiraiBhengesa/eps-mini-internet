@@ -7,6 +7,7 @@ import uuid
 
 from .config import ConfigError, get_endpoint, load_config
 from .packet import PacketError
+from .reliable import Receiver
 from .run_log import DEFAULT_LOG_DIR, create_logger, log_path, run_id_arg
 from .shutdown import stop_on_signals
 from .transport import create_udp_socket, receive_packet, send_packet
@@ -40,6 +41,8 @@ class Host:
         # echo from an earlier program run from matching a new probe.
         self.session = uuid.uuid4().hex[:8]
         self.probes_sent = 0
+        # Track B: every host can receive DATA transfers (see src/reliable.py).
+        self.receiver = Receiver(self)
 
     def close(self):
         self.sock.close()
@@ -77,6 +80,10 @@ class Host:
             if echo is None:
                 continue
 
+            if echo["type"] != "ECHO":
+                self.log(self.name, "dropped_unexpected_ack", echo)
+                continue
+
             if echo["message_id"] != message_id or echo["src"] != dst:
                 self.log(self.name, "dropped_unexpected_echo", echo)
                 continue
@@ -99,15 +106,16 @@ class Host:
         return None
 
     def serve(self, stop=None, poll_interval=0.2):
-        """Answer probes until stop is set (or forever without one)."""
+        """Answer probes and receive transfers until stop is set (or forever)."""
         while stop is None or not stop.is_set():
             packet = self.receive(poll_interval)
             if packet is None:
                 continue
 
-            echo = self.handle(packet)
-            if echo is not None:
-                self.log(self.name, "dropped_unexpected_echo", echo)
+            reply = self.handle(packet)
+            if reply is not None:
+                event = "dropped_unexpected_ack" if reply["type"] == "ACK" else "dropped_unexpected_echo"
+                self.log(self.name, event, reply)
 
     def receive(self, timeout):
         """Receive one valid packet, or None on timeout or malformed data."""
@@ -124,7 +132,11 @@ class Host:
         return packet
 
     def handle(self, packet):
-        """Process a packet; return it if it is an ECHO for this host."""
+        """Process a packet addressed to this host.
+
+        PROBEs are answered with an ECHO and DATA goes to the receiver; both
+        return None. An ECHO or ACK is returned for the caller waiting on it.
+        """
         if packet["dst"] != self.name:
             self.log(self.name, "dropped_wrong_destination", packet)
             return None
@@ -141,7 +153,11 @@ class Host:
             self._send(echo)
             return None
 
-        if packet["type"] == "ECHO":
+        if packet["type"] == "DATA":
+            self.receiver.on_data(packet)
+            return None
+
+        if packet["type"] in ("ECHO", "ACK"):
             return packet
 
         self.log(self.name, "dropped_unhandled_type", packet)
