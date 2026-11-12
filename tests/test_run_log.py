@@ -1,8 +1,11 @@
 
+import argparse
 import io
 import json
 
-from src.run_log import create_logger
+import pytest
+
+from src.run_log import create_logger, log_path, run_id_arg
 
 
 def make_packet():
@@ -95,3 +98,39 @@ def test_multiple_log_entries():
     assert len(records) == 2
     assert records[0]["event"] == "received"
     assert records[1]["event"] == "forward"
+
+
+def test_log_file_is_written_alongside_stream(tmp_path):
+    stream = io.StringIO()
+    path = log_path(tmp_path, "run-006", "routerA")
+    log = create_logger("run-006", stream, path=path)
+
+    log("routerA", "started", seed=3)
+    log("routerA", "forward", make_packet(), next_hop="routerB")
+    log.close()
+
+    assert path == tmp_path / "run-006" / "routerA.jsonl"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert [json.loads(line)["event"] for line in lines] == ["started", "forward"]
+    assert stream.getvalue().splitlines() == lines
+
+
+def test_log_file_created_only_on_first_write(tmp_path):
+    path = log_path(tmp_path, "run-007", "host1")
+    log = create_logger("run-007", io.StringIO(), path=path)
+
+    assert not path.exists()
+    log("host1", "started")
+    log.close()
+    assert path.exists()
+
+
+@pytest.mark.parametrize("value", ["baseline-d20-l5-s3", "run.1", "A_b"])
+def test_run_id_accepts_simple_names(value):
+    assert run_id_arg(value) == value
+
+
+@pytest.mark.parametrize("value", ["", "../escape", "a/b", "-starts-with-dash", "x" * 65])
+def test_run_id_rejects_unsafe_names(value):
+    with pytest.raises(argparse.ArgumentTypeError):
+        run_id_arg(value)

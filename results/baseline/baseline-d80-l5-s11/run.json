@@ -1,0 +1,95 @@
+{
+  "run_id": "baseline-d80-l5-s11",
+  "condition": "delay 80 ms, loss 5%",
+  "seed": 11,
+  "router_seeds": {
+    "routerA": 110,
+    "routerB": 111,
+    "routerC": 112,
+    "routerD": 113
+  },
+  "base_config": "config/topology_upper.json",
+  "link": "routerB-routerD",
+  "loss": 0.05,
+  "delay_ms": 80,
+  "links": [
+    {
+      "endpoints": [
+        "host1",
+        "routerA"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerB"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerC"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerB",
+        "routerD"
+      ],
+      "loss": 0.05,
+      "delay_ms": 80
+    },
+    {
+      "endpoints": [
+        "routerC",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerD",
+        "host2"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    }
+  ],
+  "paths": {
+    "forward": [
+      "host1",
+      "routerA",
+      "routerB",
+      "routerD",
+      "host2"
+    ],
+    "return": [
+      "host2",
+      "routerD",
+      "routerB",
+      "routerA",
+      "host1"
+    ]
+  },
+  "sender": "host1",
+  "receiver": "host2",
+  "count": 20,
+  "interval_s": 0.2,
+  "timeout_s": 1.0,
+  "payload": null,
+  "drop_rules": {},
+  "code_version": "55fd4da",
+  "python": "3.13.7",
+  "started_at": "2026-11-12T19:41:19.645759+00:00",
+  "finished_at": "2026-11-12T19:41:31.181878+00:00",
+  "duration_s": 11.536,
+  "sender_exit_code": 1,
+  "sender_summary": "15/20 probes answered"
+}

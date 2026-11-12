@@ -1,0 +1,1 @@
+{"run_id":"baseline-d20-l5-s5","device":"routerC","timestamp":1794512437.425225,"event":"started","endpoint":"127.0.0.1:5103","seed":52,"links":[{"neighbor":"routerA","loss":0.0,"delay_ms":0},{"neighbor":"routerD","loss":0.0,"delay_ms":0}],"drop_rules":[]}

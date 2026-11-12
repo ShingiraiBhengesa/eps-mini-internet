@@ -1,0 +1,5 @@
+condition,link,loss,delay_ms,runs,seeds,probes,answered,timeouts,success_fraction,success_sd,rtt_mean_ms,rtt_sd_ms,rtt_median_ms,rtt_min_ms,rtt_max_ms,drops_injected,incomplete_runs
+"delay 20 ms, loss 0%",routerB-routerD,0.0,20,3,1 2 3,60,60,0,1.0,0.0,58.443,95.059,46.194,43.138,782.351,0,0
+"delay 20 ms, loss 5%",routerB-routerD,0.05,20,3,4 5 6,60,56,4,0.9333,0.0289,45.841,2.33,45.706,43.192,60.524,4,0
+"delay 80 ms, loss 0%",routerB-routerD,0.0,80,3,7 8 9,60,60,0,1.0,0.0,166.506,4.726,165.872,163.356,198.799,0,0
+"delay 80 ms, loss 5%",routerB-routerD,0.05,80,3,10 11 12,60,52,8,0.8667,0.1041,166.183,1.481,166.358,163.384,170.599,8,0

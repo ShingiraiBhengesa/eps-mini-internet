@@ -1,7 +1,7 @@
 
 import pytest
 
-from scripts.make_routes import make_route_config
+from scripts.make_routes import make_loop_config, make_route_config
 from src.config import load_config, validate_config
 
 
@@ -50,3 +50,20 @@ def test_original_configuration_unchanged(base_config):
 def test_invalid_route_name(base_config):
     with pytest.raises(ValueError):
         make_route_config(base_config, "middle")
+
+
+def test_loop_config_keeps_host_routes(base_config):
+    config = make_loop_config(base_config)
+
+    assert config["paths"] == base_config["paths"]
+    assert config["devices"]["routerA"]["forwarding_table"]["routerD"] == "routerB"
+    assert config["devices"]["routerB"]["forwarding_table"]["routerD"] == "routerA"
+
+
+@pytest.mark.parametrize("path,build", [
+    ("config/topology_upper.json", lambda base: make_route_config(base, "upper")),
+    ("config/topology_lower.json", lambda base: make_route_config(base, "lower")),
+    ("config/topology_loop.json", make_loop_config),
+])
+def test_committed_configs_match_generator(base_config, path, build):
+    assert load_config(path) == build(base_config)
