@@ -147,6 +147,36 @@ python -m src.host --name host1 --probe host2 --count 3 --timeout 2 --config con
 
 Stop the routers and host2 with Ctrl-C. The probing host exits on its own and prints `N/M probes answered` to standard error. Its exit code is 0 only if every probe was answered. Add the same `--run-id` to every command to group the logs. For the lower path, use `config/topology_lower.json`. Host2 can also probe host1 by swapping the roles.
 
+### Live demo view (two terminals)
+
+`scripts.demo_net` starts the four routers and host2 in one terminal and prints every device's events as readable lines as they happen:
+
+```bash
+# terminal 1: leave this on screen
+python -m scripts.demo_net --run-id demo
+
+# terminal 2: send traffic
+python -m src.host --name host1 --probe host2 --count 3 --config config/topology_upper.json --run-id demo
+```
+
+```text
+14:43:21.277  host1    sends PROBE host1→host2 to routerA (hop limit 16)  [host1-10510c31-1]
+14:43:21.277  routerA  forwards PROBE host1→host2 to routerB, hop limit now 15  [host1-10510c31-1]
+...
+14:43:21.278  host1    gets the ECHO back: round trip 1.3 ms  [host1-10510c31-1]
+```
+
+It uses the upper path by default and takes the same `--config`, `--seed`, `--link/--loss/--delay-ms` and `--drop-rule ROUTER:RULE` options as the launcher. `--all` also shows each router's receive, queue and send steps. Ctrl-C stops the whole network. The logs stay in `logs/<run-id>/`, and reusing a run ID needs `--replace`, which deletes the old folder.
+
+### Tracing one packet
+
+```bash
+python -m scripts.trace logs/demo        # every probe in the run and how it ended
+python -m scripts.trace logs/demo 2      # probe 2, hop by hop, with timings
+```
+
+The trace lists each step with its time since the probe was sent, then the whole path, for example `host1 → routerA → routerB → routerD → host2 → routerD → routerB → routerA → host1`. A lost packet ends at the router that dropped it, with the reason. It works on any run folder, including those under `results/`.
+
 ## Demo Scenarios
 
 Each demo starts the six processes above unless it says otherwise. Every expected log line below was produced by running the command.
@@ -267,6 +297,7 @@ The tests cover:
 - Network logging, log files and run IDs
 - Upper and lower routing paths
 - The launcher (including a full run on spare ports) and the metrics
+- The live demo view and the packet trace
 
 ## Module Interfaces
 
@@ -281,6 +312,7 @@ The tests cover:
 - `src/shutdown.py`: Stops a process cleanly on Ctrl-C or SIGTERM.
 - `scripts/make_routes.py`: Generates the upper, lower and loop configs.
 - `scripts/launch.py`, `scripts/run_baseline.py`, `scripts/metrics.py`, `scripts/plot_results.py`: Experiment tools.
+- `scripts/demo_net.py`, `scripts/trace.py`: Live demo view and packet tracing.
 
 ## Track B
 

@@ -1,7 +1,6 @@
 
 import argparse
 import json
-import socket
 
 import pytest
 
@@ -55,25 +54,8 @@ def test_router_drop_rule_arg():
             router_drop_rule_arg(bad)
 
 
-def free_port_config(tmp_path):
-    """The upper-path topology moved onto ports nothing else is using."""
-    config = load_config("config/topology_upper.json")
-    sockets = []
-    for device in config["devices"].values():
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.bind(("127.0.0.1", 0))
-        sockets.append(sock)
-        device["udp_port"] = sock.getsockname()[1]
-    for sock in sockets:
-        sock.close()
-
-    path = tmp_path / "topology.json"
-    path.write_text(json.dumps(config), encoding="utf-8")
-    return path
-
-
-def test_run_experiment_end_to_end(tmp_path):
-    config_path = free_port_config(tmp_path)
+def test_run_experiment_end_to_end(tmp_path, upper_config_on_free_ports):
+    config_path = upper_config_on_free_ports
     out = tmp_path / "runs"
 
     run_dir, meta = run_experiment(
