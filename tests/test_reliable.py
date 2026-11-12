@@ -11,6 +11,7 @@ from src.host import Host
 from src.packet import decode_packet
 from src.reliable import (
     BestEffortSender,
+    GoBackNSender,
     Pacer,
     Receiver,
     StopAndWaitSender,
@@ -217,6 +218,8 @@ def link():
     events = []
 
     def log(device, event, packet=None, **details):
+        if packet is not None:
+            details = dict(details, message_id=packet["message_id"], type=packet["type"])
         events.append((event, details))
 
     host1 = Host(config, "host1", sock=sockets["host1"], log=log)
@@ -232,11 +235,12 @@ class FakeNetwork:
     DATA or ACK is lost. extra_acks sends each ACK this many extra times.
     """
 
-    def __init__(self, link, drop_data=(), drop_ack=(), extra_acks=0):
+    def __init__(self, link, drop_data=(), drop_ack=(), extra_acks=0, ack_delay=0.0):
         self.gateway = link["gateway"]
         self.host1 = link["host1"].sock.getsockname()
         self.drop_data, self.drop_ack = set(drop_data), set(drop_ack)
         self.extra_acks = extra_acks
+        self.ack_delay = ack_delay
         self.seen_data, self.seen_ack = {}, {}
         self.remote = FakeHost(on_send=self.forward_ack)
         self.receiver = Receiver(self.remote)
@@ -248,6 +252,7 @@ class FakeNetwork:
         self.seen_ack[mid] = self.seen_ack.get(mid, 0) + 1
         if (mid, self.seen_ack[mid]) in self.drop_ack:
             return
+        time.sleep(self.ack_delay)
         for _ in range(1 + self.extra_acks):
             send_packet(self.gateway, self.host1, ack)
 
@@ -414,3 +419,181 @@ def test_cli_rejects_bad_numbers(args, capsys):
 def test_cli_rejects_bad_options(args):
     with pytest.raises(SystemExit):
         main(args)
+
+
+# ---------------------------------------------------------------- Go-Back-N (enhancement)
+
+def gbn(seq, transfer="t"):
+    return data(seq, transfer=transfer, mode="gobackn")
+
+
+def acks(host):
+    return [p["message_id"] for p in host.sent]
+
+
+def test_go_back_n_receiver_acks_cumulatively():
+    host = FakeHost()
+    receiver = Receiver(host)
+
+    for seq in (1, 2, 3):
+        receiver.on_data(gbn(seq))
+
+    assert delivered(host) == [1, 2, 3]
+    assert acks(host) == ["gbn-t-1", "gbn-t-2", "gbn-t-3"]
+
+
+def test_go_back_n_receiver_discards_gaps_and_reacks_the_highest():
+    host = FakeHost()
+    receiver = Receiver(host)
+
+    receiver.on_data(gbn(1))
+    receiver.on_data(gbn(3))      # 2 was lost: discard 3, ACK 1 again
+    receiver.on_data(gbn(4))
+    receiver.on_data(gbn(2))
+    receiver.on_data(gbn(1))      # an old copy: ACK 2 again
+
+    assert delivered(host) == [1, 2]
+    assert acks(host) == ["gbn-t-1", "gbn-t-1", "gbn-t-1", "gbn-t-2", "gbn-t-2"]
+    assert host.names().count("dropped_out_of_order") == 2
+    assert receiver.summary()["duplicates"] == 1
+
+
+def test_go_back_n_receiver_acks_nothing_before_message_1():
+    host = FakeHost()
+    Receiver(host).on_data(gbn(2))
+
+    assert host.sent == []
+    assert delivered(host) == []
+
+
+def go_back_n(link, count=8, window=4, timeout=0.2, retries=3, rate=200):
+    return GoBackNSender(link["host1"], "host2", count, "t", window=window,
+                         timeout=timeout, retries=retries, rate=rate)
+
+
+def in_flight(events):
+    """Most messages sent but not yet acknowledged, from the sender's log."""
+    highest_sent = acked = most = 0
+    for event, d in events:
+        if event == "sent" and d.get("type") == "DATA":
+            highest_sent = max(highest_sent, parse_message_id(d["message_id"])[2])
+            most = max(most, highest_sent - acked)
+        elif event == "ack_received":
+            acked = d["acked_through"]
+    return most
+
+
+def test_go_back_n_without_loss(link):
+    with FakeNetwork(link) as net:
+        summary = go_back_n(link).run()
+
+    assert summary["success"] is True
+    assert (summary["acked"], summary["retransmissions"], summary["window"]) == (8, 0, 4)
+    assert delivered(net.remote) == list(range(1, 9))
+
+
+def test_go_back_n_fills_but_never_exceeds_its_window(link):
+    with FakeNetwork(link, ack_delay=0.02) as net:
+        summary = go_back_n(link, count=10, window=3).run()
+
+    assert summary["success"] is True
+    assert in_flight(link["events"]) == 3
+    assert delivered(net.remote) == list(range(1, 11))
+
+
+def test_window_of_one_keeps_one_message_in_flight(link):
+    with FakeNetwork(link, ack_delay=0.01):
+        summary = go_back_n(link, count=5, window=1).run()
+
+    assert summary["success"] is True
+    assert in_flight(link["events"]) == 1
+
+
+def test_go_back_n_goes_back_after_a_lost_data_message(link):
+    with FakeNetwork(link, drop_data=[("gbn-t-3", 1)], ack_delay=0.01) as net:
+        summary = go_back_n(link).run()
+
+    resent = [d["seq"] for e, d in link["events"] if e == "retransmit"]
+    assert summary["success"] is True
+    assert resent and resent[0] == 3                  # goes back to the lost message
+    assert summary["retransmissions"] == len(resent)
+    assert delivered(net.remote) == list(range(1, 9))  # still once and in order
+    assert "dropped_out_of_order" in net.remote.names()
+
+
+def test_a_later_cumulative_ack_covers_a_lost_ack(link):
+    with FakeNetwork(link, drop_ack=[("gbn-t-2", 1)], ack_delay=0.01) as net:
+        summary = go_back_n(link).run()
+
+    assert summary["success"] is True
+    assert summary["retransmissions"] == 0
+    assert delivered(net.remote) == list(range(1, 9))
+    assert any(d["newly_acked"] >= 2 for e, d in link["events"] if e == "ack_received")
+
+
+def test_go_back_n_recovers_a_lost_final_ack(link):
+    with FakeNetwork(link, drop_ack=[("gbn-t-8", 1)]) as net:
+        summary = go_back_n(link).run()
+
+    assert summary["success"] is True
+    assert summary["retransmissions"] == 1
+    assert net.receiver.summary()["duplicates"] == 1
+    assert acks(net.remote).count("gbn-t-8") == 2
+
+
+def test_go_back_n_gives_up_after_its_retry_limit(link):
+    started = time.monotonic()
+    summary = go_back_n(link, count=5, window=3, timeout=0.1, retries=2).run()
+    took = time.monotonic() - started
+
+    assert summary["success"] is False
+    assert summary["failed_at"] == 1
+    assert summary["retransmissions"] == 2 * 3          # each timeout resends the window
+    assert 0.3 <= took < 0.8
+
+
+def test_go_back_n_through_routers_with_forced_drops():
+    config = make_route_config(load_config("config/topology.json"), "upper")
+    sockets = {name: create_udp_socket("127.0.0.1", 0) for name in config["devices"]}
+    for name, sock in sockets.items():
+        config["devices"][name]["udp_port"] = sock.getsockname()[1]
+
+    events = []
+
+    def log(device, event, packet=None, **details):
+        events.append((device, event, details))
+
+    rules = {
+        "routerB": [DropRule.parse("type=DATA,message_id=gbn-it-3")],
+        "routerD": [DropRule.parse("type=ACK,message_id=gbn-it-6")],
+    }
+    routers = [Router(config, name, sock=sockets[name], log=log, drop_rules=rules.get(name))
+               for name in ("routerA", "routerB", "routerC", "routerD")]
+    host1 = Host(config, "host1", sock=sockets["host1"], log=log)
+    host2 = Host(config, "host2", sock=sockets["host2"], log=log)
+
+    stop = threading.Event()
+    threads = [threading.Thread(target=r.serve, args=(stop, 0.02)) for r in routers]
+    threads.append(threading.Thread(target=host2.serve, args=(stop, 0.02)))
+    for thread in threads:
+        thread.start()
+
+    try:
+        summary = GoBackNSender(host1, "host2", 6, "it", window=3, timeout=0.3,
+                                retries=3, rate=100).run()
+    finally:
+        stop.set()
+        for thread in threads:
+            thread.join(timeout=2)
+        for sock in sockets.values():
+            sock.close()
+
+    assert summary["success"] is True
+    assert summary["retransmissions"] >= 2
+    assert [d["seq"] for dev, e, d in events if e == "delivered"] == [1, 2, 3, 4, 5, 6]
+    assert sorted(dev for dev, e, d in events if e == "drop_forced") == ["routerB", "routerD"]
+
+
+def test_cli_rejects_a_zero_window(capsys):
+    assert main(["send", "--name", "host1", "--to", "host2", "--mode", "gobackn", "--window", "0"]) == 2
+    assert "--window" in capsys.readouterr().err

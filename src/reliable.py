@@ -1,11 +1,13 @@
-"""Track B: reliable transfer with stop-and-wait, plus a best-effort baseline.
+"""Track B: reliable transfer with stop-and-wait, plus a best-effort baseline
+and, as the optional enhancement, a Go-Back-N sliding window.
 
 Message IDs carry the protocol's state: "<mode>-<transfer>-<seq>".
-    mode      "sw" (stop-and-wait) or "be" (best-effort)
+    mode      "sw" (stop-and-wait), "be" (best-effort) or "gbn" (Go-Back-N)
     transfer  names one transfer: letters, digits, '.', '_' and '-'
     seq       message number, 1 to N
 An ACK reuses the message ID of the DATA it acknowledges, the same way an
-ECHO reuses its probe's ID, so the packet format is unchanged.
+ECHO reuses its probe's ID, so the packet format is unchanged. A Go-Back-N
+ACK is cumulative: the ACK for message k means messages 1 to k all arrived.
 
     python -m src.reliable send --name host1 --to host2 --count 20
     python -m src.reliable receive --name host2 --expect 20
@@ -23,7 +25,7 @@ from .packet import PacketError
 from .run_log import DEFAULT_LOG_DIR, create_logger, log_path, run_id_arg
 from .shutdown import stop_on_signals
 
-MODES = {"stopwait": "sw", "besteffort": "be"}
+MODES = {"stopwait": "sw", "besteffort": "be", "gobackn": "gbn"}
 MODE_NAMES = {code: name for name, code in MODES.items()}
 TRANSFER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$")
 
@@ -32,6 +34,7 @@ DEFAULT_RATE = 20.0       # messages per second, the most either sender sends
 DEFAULT_TIMEOUT = 0.5     # seconds to wait for each ACK
 DEFAULT_RETRIES = 5       # resends allowed per message before giving up
 DEFAULT_LINGER = 3.0      # seconds the receiver stays after the last message
+DEFAULT_WINDOW = 4        # Go-Back-N: most messages in flight at once
 
 
 def message_id(mode, transfer, seq):
@@ -84,6 +87,12 @@ class Receiver:
     Best-effort: every new message is delivered once, in any order, and
     nothing is ACKed.
 
+    Go-Back-N: only the next expected message is delivered, as in
+    stop-and-wait, but every ACK is cumulative: after any arrival the
+    receiver ACKs the highest message it has delivered in order. A copy of
+    an earlier message or a message from further ahead is not delivered; it
+    re-ACKs that highest message, which tells the sender where to go back to.
+
     With `expect` set, the receiver reports itself finished `linger` seconds
     after the last expected message arrives, so a resent final message still
     gets its ACK. With `observe` set, it finishes that many seconds after the
@@ -119,6 +128,8 @@ class Receiver:
 
         if mode == "stopwait":
             self._stop_and_wait(state, packet, seq)
+        elif mode == "gobackn":
+            self._go_back_n(state, packet, seq)
         else:
             self._best_effort(state, packet, seq)
 
@@ -140,6 +151,29 @@ class Receiver:
             self._ack(packet)
         else:
             self.log("dropped_out_of_order", packet, seq=seq, expected=state.expected)
+
+    def _go_back_n(self, state, packet, seq):
+        if seq == state.expected:
+            state.delivered.append(seq)
+            state.expected += 1
+            self.log("delivered", packet, seq=seq, mode="gobackn")
+            self._ack_through(packet, state, seq)
+            return
+
+        highest = state.expected - 1
+        if seq < state.expected:
+            state.duplicates += 1
+            self.log("duplicate", packet, seq=seq, acked=True, acked_through=highest)
+        else:
+            self.log("dropped_out_of_order", packet, seq=seq, expected=state.expected,
+                     acked_through=highest if highest else None)
+        if highest:
+            self._ack_through(packet, state, highest)
+
+    def _ack_through(self, data, state, highest):
+        """Cumulative ACK: messages 1 to `highest` have all been delivered."""
+        mid = message_id(state.mode, state.transfer, highest)
+        self.host._send(self.host._make_packet("ACK", data["src"], mid, ""))
 
     def _best_effort(self, state, packet, seq):
         if seq in state.delivered:
@@ -309,6 +343,146 @@ class StopAndWaitSender:
         return summary
 
 
+class GoBackNSender:
+    """Go-Back-N sliding window: up to `window` messages in flight at once.
+
+    This is the optional enhancement; stop-and-wait above is unchanged. The
+    sender fills the window, then waits. One timer runs for the oldest
+    unacknowledged message (the base). A cumulative ACK for message k slides
+    the window to k + 1 and restarts the timer if messages are still in
+    flight. When the timer expires, the sender goes back: it resends every
+    message from the base onwards, counting each as a retransmission. After
+    `retries` timeouts in a row without the base moving, it gives up. Late or
+    duplicate ACKs (for messages already acknowledged) are ignored. With a
+    window of 1 it behaves like stop-and-wait.
+    """
+
+    mode = "gobackn"
+
+    def __init__(self, host, dst, count, transfer, window=DEFAULT_WINDOW,
+                 timeout=DEFAULT_TIMEOUT, retries=DEFAULT_RETRIES, rate=DEFAULT_RATE,
+                 clock=time.monotonic, sleep=time.sleep):
+        self.host = host
+        self.dst = dst
+        self.count = count
+        self.transfer = transfer
+        self.window = window
+        self.timeout = timeout
+        self.retries = retries
+        self.rate = rate
+        self.clock = clock
+        self.pacer = Pacer(rate, clock, sleep)
+        self.base = 1          # oldest message not yet acknowledged
+        self.next_seq = 1      # next new message to send
+        self.attempts = {}     # message -> times sent
+        self.sent_at = {}      # message -> when it was last sent
+
+    def log(self, event, packet=None, **details):
+        self.host.log(self.host.name, event, packet, **details)
+
+    def _packet(self, seq):
+        mid = message_id(self.mode, self.transfer, seq)
+        return self.host._make_packet("DATA", self.dst, mid, data_payload(seq))
+
+    def _send(self, seq):
+        packet = self._packet(seq)
+        self.pacer.wait()
+        self.attempts[seq] = self.attempts.get(seq, 0) + 1
+        if self.attempts[seq] > 1:
+            self.log("retransmit", packet, seq=seq, attempt=self.attempts[seq])
+        self.sent_at[seq] = self.clock()
+        self.host._send(packet)
+
+    def run(self):
+        self.log("transfer_started", mode=self.mode, transfer=self.transfer,
+                 dst=self.dst, messages=self.count, window=self.window,
+                 rate=self.rate, timeout_s=self.timeout, retries=self.retries)
+        start = self.clock()
+        timer = None           # when the base was last sent
+        stalls = 0             # timeouts in a row without the base moving
+        retransmissions = 0
+
+        while self.base <= self.count:
+            # Fill the window with new messages.
+            while self.next_seq <= self.count and self.next_seq < self.base + self.window:
+                self._send(self.next_seq)
+                if self.next_seq == self.base:
+                    timer = self.sent_at[self.base]
+                self.next_seq += 1
+
+            remaining = timer + self.timeout - self.clock()
+            if remaining > 0:
+                acked = self._receive_ack(remaining)
+                if acked is not None:
+                    self.base = acked + 1
+                    stalls = 0
+                    timer = self.clock() if self.base < self.next_seq else None
+                continue
+
+            # Timeout: go back and resend everything from the base.
+            stalls += 1
+            self.log("ack_timeout", self._packet(self.base), seq=self.base,
+                     attempt=self.attempts[self.base], timeout_s=self.timeout,
+                     in_flight=self.next_seq - self.base)
+            if stalls > self.retries:
+                self.log("transfer_failed", self._packet(self.base), seq=self.base,
+                         attempts=self.attempts[self.base])
+                return self._finish(start, self.base - 1, retransmissions, failed_at=self.base)
+            for seq in range(self.base, self.next_seq):
+                self._send(seq)
+                retransmissions += 1
+                if seq == self.base:
+                    timer = self.sent_at[seq]
+
+        return self._finish(start, self.count, retransmissions)
+
+    def _receive_ack(self, wait):
+        """Wait up to `wait` seconds; return k for a new cumulative ACK, else None."""
+        packet = self.host.receive(wait)
+        if packet is None:
+            return None
+        reply = self.host.handle(packet)
+        if reply is None:
+            return None
+        if reply["type"] != "ACK":
+            self.log("dropped_unexpected_echo", reply)
+            return None
+
+        parsed = parse_message_id(reply["message_id"])
+        if reply["src"] != self.dst or not parsed or parsed[:2] != (self.mode, self.transfer):
+            self.log("ack_ignored", reply, reason="ACK for another transfer")
+            return None
+        k = parsed[2]
+        if k < self.base:
+            self.log("ack_ignored", reply, reason="duplicate ACK: everything up to "
+                     f"#{k} was already acknowledged")
+            return None
+        if k >= self.next_seq:
+            self.log("ack_ignored", reply, reason=f"ACK for #{k}, which was never sent")
+            return None
+
+        rtt_ms = (self.clock() - self.sent_at[k]) * 1000
+        self.log("ack_received", reply, seq=k, acked_through=k,
+                 newly_acked=k - self.base + 1, attempt=self.attempts[k],
+                 rtt_ms=round(rtt_ms, 3))
+        return k
+
+    def _finish(self, start, acked, retransmissions, failed_at=None):
+        summary = {
+            "mode": self.mode,
+            "transfer": self.transfer,
+            "window": self.window,
+            "messages": self.count,
+            "acked": acked,
+            "retransmissions": retransmissions,
+            "elapsed_s": round(self.clock() - start, 3),
+            "success": failed_at is None,
+            "failed_at": failed_at,
+        }
+        self.log("transfer_done", **summary)
+        return summary
+
+
 class BestEffortSender:
     """The comparison baseline: same messages and rate, no ACKs, no resends."""
 
@@ -391,6 +565,8 @@ def build_parser():
                       help="seconds to wait for each ACK (stop-and-wait)")
     send.add_argument("--retries", type=int, default=DEFAULT_RETRIES,
                       help="resends allowed per message before giving up (stop-and-wait)")
+    send.add_argument("--window", type=int, default=DEFAULT_WINDOW,
+                      help="most messages in flight at once (gobackn, default %(default)s)")
     send.add_argument("--transfer-id", type=transfer_id_arg,
                       help="name used in message IDs (default: random)")
 
@@ -415,11 +591,14 @@ def describe_send(summary):
     if summary["mode"] == "besteffort":
         return (f"best-effort: sent {summary['messages']} messages in "
                 f"{summary['elapsed_s']:.2f} s (no acknowledgements)")
+    name = "stop-and-wait"
+    if summary["mode"] == "gobackn":
+        name = f"go-back-n (window {summary['window']})"
     if summary["success"]:
-        return (f"stop-and-wait: {summary['acked']}/{summary['messages']} messages "
+        return (f"{name}: {summary['acked']}/{summary['messages']} messages "
                 f"acknowledged, {plural(summary['retransmissions'], 'retransmission')}, "
                 f"{summary['elapsed_s']:.2f} s")
-    return (f"stop-and-wait: gave up on message {summary['failed_at']} after "
+    return (f"{name}: gave up on message {summary['failed_at']} after "
             f"{plural(summary['retransmissions'], 'retransmission')} in total, "
             f"{summary['elapsed_s']:.2f} s ({summary['acked']} acknowledged before that)")
 
@@ -440,7 +619,7 @@ def main(argv=None):
     from .host import Host  # imported here: host.py imports this module
 
     args = build_parser().parse_args(argv)
-    for name, minimum in (("count", 1), ("retries", 0), ("expect", 1)):
+    for name, minimum in (("count", 1), ("retries", 0), ("expect", 1), ("window", 1)):
         value = getattr(args, name, None)
         if value is not None and value < minimum:
             print(f"error: --{name} must be at least {minimum}", file=sys.stderr)
@@ -469,6 +648,9 @@ def main(argv=None):
             if args.mode == "stopwait":
                 sender = StopAndWaitSender(host, args.to, args.count, transfer,
                                            args.timeout, args.retries, args.rate)
+            elif args.mode == "gobackn":
+                sender = GoBackNSender(host, args.to, args.count, transfer, args.window,
+                                       args.timeout, args.retries, args.rate)
             else:
                 sender = BestEffortSender(host, args.to, args.count, transfer, args.rate)
             summary = sender.run()
