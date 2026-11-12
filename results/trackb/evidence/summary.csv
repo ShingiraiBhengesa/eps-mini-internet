@@ -1,0 +1,5 @@
+case,what,result,delivered,in_order,duplicates_at_receiver,retransmissions,sender_success,sender_elapsed_s,receiver_stop
+no-loss,"0% loss: every message delivered once, in order",PASS,10/10,True,0,0,True,0.495,linger_over
+data-drop,DATA 5 dropped once at routerB: resent and recovered,PASS,10/10,True,0,1,True,0.799,linger_over
+final-ack-drop,"final ACK (message 10) dropped once at routerD: sender resends, lingering receiver ACKs again",PASS,10/10,True,1,1,True,0.8,linger_over
+unreachable,host2 not running: sender gives up after its retry limit,PASS,0/10,True,0,5,False,1.809,

@@ -1,0 +1,101 @@
+{
+  "run_id": "evidence-unreachable",
+  "seed": 0,
+  "router_seeds": {
+    "routerA": 0,
+    "routerB": 1,
+    "routerC": 2,
+    "routerD": 3
+  },
+  "base_config": "config/topology_upper.json",
+  "link": "routerB-routerD",
+  "loss": 0.0,
+  "delay_ms": 20,
+  "links": [
+    {
+      "endpoints": [
+        "host1",
+        "routerA"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerB"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerC"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerB",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 20
+    },
+    {
+      "endpoints": [
+        "routerC",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerD",
+        "host2"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    }
+  ],
+  "paths": {
+    "forward": [
+      "host1",
+      "routerA",
+      "routerB",
+      "routerD",
+      "host2"
+    ],
+    "return": [
+      "host2",
+      "routerD",
+      "routerB",
+      "routerA",
+      "host1"
+    ]
+  },
+  "drop_rules": {},
+  "code_version": "core-checkpoint-9-gac372d0",
+  "python": "3.13.7",
+  "kind": "transfer",
+  "condition": "unreachable",
+  "sender": "host1",
+  "receiver": "host2",
+  "receiver_started": false,
+  "mode": "stopwait",
+  "count": 10,
+  "rate": 20.0,
+  "timeout_s": 0.3,
+  "retries": 5,
+  "linger_s": 2.0,
+  "observe_s": null,
+  "transfer_id": "ev-unreachable",
+  "started_at": "2026-11-12T22:27:08.800944+00:00",
+  "finished_at": "2026-11-12T22:27:10.795109+00:00",
+  "duration_s": 1.994,
+  "sender_exit_code": 1,
+  "sender_summary": "stop-and-wait: gave up on message 1 after 5 retransmissions in total, 1.81 s (0 acknowledged before that)"
+}

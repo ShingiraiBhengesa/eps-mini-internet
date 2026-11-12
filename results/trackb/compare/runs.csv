@@ -1,0 +1,13 @@
+run_id,condition,seed,mode,link,loss,delay_ms,messages,delivered,delivered_fraction,full_sequence,in_order,duplicates_at_receiver,data_sent,retransmissions,sender_success,failed_at,sender_elapsed_s,delivery_time_s,data_drops,ack_drops,receiver_stop,sender_exit_code,complete
+trackb-be-l0-s101,"best-effort, loss 0%",101,besteffort,routerB-routerD,0.0,20,50,50,1.0,True,True,0,50,0,,,0.984,1.006,0,0,linger_over,0,True
+trackb-be-l0-s102,"best-effort, loss 0%",102,besteffort,routerB-routerD,0.0,20,50,50,1.0,True,True,0,50,0,,,0.983,1.006,0,0,linger_over,0,True
+trackb-be-l0-s103,"best-effort, loss 0%",103,besteffort,routerB-routerD,0.0,20,50,50,1.0,True,True,0,50,0,,,0.983,1.005,0,0,linger_over,0,True
+trackb-be-l5-s107,"best-effort, loss 5%",107,besteffort,routerB-routerD,0.05,20,50,46,0.92,False,True,0,50,0,,,0.983,1.004,4,0,observation_over,0,True
+trackb-be-l5-s108,"best-effort, loss 5%",108,besteffort,routerB-routerD,0.05,20,50,47,0.94,False,True,0,50,0,,,0.982,1.005,3,0,observation_over,0,True
+trackb-be-l5-s109,"best-effort, loss 5%",109,besteffort,routerB-routerD,0.05,20,50,47,0.94,False,True,0,50,0,,,0.981,1.004,3,0,observation_over,0,True
+trackb-sw-l0-s104,"stop-and-wait, loss 0%",104,stopwait,routerB-routerD,0.0,20,50,50,1.0,True,True,0,50,0,True,,2.208,2.186,0,0,linger_over,0,True
+trackb-sw-l0-s105,"stop-and-wait, loss 0%",105,stopwait,routerB-routerD,0.0,20,50,50,1.0,True,True,0,50,0,True,,2.267,2.244,0,0,linger_over,0,True
+trackb-sw-l0-s106,"stop-and-wait, loss 0%",106,stopwait,routerB-routerD,0.0,20,50,50,1.0,True,True,0,50,0,True,,2.245,2.221,0,0,linger_over,0,True
+trackb-sw-l5-s110,"stop-and-wait, loss 5%",110,stopwait,routerB-routerD,0.05,20,50,50,1.0,True,True,1,54,4,True,,3.414,3.393,3,1,linger_over,0,True
+trackb-sw-l5-s111,"stop-and-wait, loss 5%",111,stopwait,routerB-routerD,0.05,20,50,50,1.0,True,True,1,54,4,True,,3.423,3.401,3,1,linger_over,0,True
+trackb-sw-l5-s112,"stop-and-wait, loss 5%",112,stopwait,routerB-routerD,0.05,20,50,50,1.0,True,True,1,54,4,True,,3.43,3.407,3,1,linger_over,0,True

@@ -1,0 +1,102 @@
+{
+  "run_id": "trackb-be-l0-s102",
+  "seed": 102,
+  "router_seeds": {
+    "routerA": 1020,
+    "routerB": 1021,
+    "routerC": 1022,
+    "routerD": 1023
+  },
+  "base_config": "config/topology_upper.json",
+  "link": "routerB-routerD",
+  "loss": 0.0,
+  "delay_ms": 20,
+  "links": [
+    {
+      "endpoints": [
+        "host1",
+        "routerA"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerB"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerC"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerB",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 20
+    },
+    {
+      "endpoints": [
+        "routerC",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerD",
+        "host2"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    }
+  ],
+  "paths": {
+    "forward": [
+      "host1",
+      "routerA",
+      "routerB",
+      "routerD",
+      "host2"
+    ],
+    "return": [
+      "host2",
+      "routerD",
+      "routerB",
+      "routerA",
+      "host1"
+    ]
+  },
+  "drop_rules": {},
+  "code_version": "core-checkpoint-9-gac372d0",
+  "python": "3.13.7",
+  "kind": "transfer",
+  "condition": "best-effort, loss 0%",
+  "sender": "host1",
+  "receiver": "host2",
+  "receiver_started": true,
+  "mode": "besteffort",
+  "count": 50,
+  "rate": 50.0,
+  "timeout_s": 0.3,
+  "retries": 5,
+  "linger_s": 2.0,
+  "observe_s": 3.0,
+  "transfer_id": "trackb-be-l0-s102",
+  "started_at": "2026-11-12T22:27:14.097325+00:00",
+  "receiver_exited_by_itself": true,
+  "finished_at": "2026-11-12T22:27:17.323336+00:00",
+  "duration_s": 3.226,
+  "sender_exit_code": 0,
+  "sender_summary": "best-effort: sent 50 messages in 0.98 s (no acknowledgements)"
+}

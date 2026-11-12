@@ -1,0 +1,5 @@
+condition,mode,link,loss,delay_ms,runs,seeds,messages,delivered,delivered_fraction,delivered_sd,full_sequence_runs,retransmissions,retransmissions_per_run,duplicates_at_receiver,data_sent,delivery_time_mean_s,delivery_time_sd_s,sender_elapsed_mean_s,sender_elapsed_sd_s,incomplete_runs
+"best-effort, loss 0%",besteffort,routerB-routerD,0.0,20,3,101 102 103,150,150,1.0,0.0,3,0,0.0,0,150,1.006,0.001,0.983,0.001,0
+"stop-and-wait, loss 0%",stopwait,routerB-routerD,0.0,20,3,104 105 106,150,150,1.0,0.0,3,0,0.0,0,150,2.217,0.029,2.24,0.03,0
+"best-effort, loss 5%",besteffort,routerB-routerD,0.05,20,3,107 108 109,150,140,0.9333,0.0115,0,0,0.0,0,150,1.004,0.001,0.982,0.001,0
+"stop-and-wait, loss 5%",stopwait,routerB-routerD,0.05,20,3,110 111 112,150,150,1.0,0.0,3,12,4.0,3,162,3.4,0.007,3.422,0.008,0
