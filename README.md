@@ -163,6 +163,8 @@ Each process prints its own events as JSON lines. Stop the routers and host2 wit
 
 ## Demo Scenarios
 
+Recorded, automatically checked evidence for all of these scenarios is in [`results/acceptance/README.md`](results/acceptance/README.md); `python -m scripts.run_acceptance` regenerates it in about 25 seconds.
+
 Each scenario uses the [live view](#live-view-two-terminals): a terminal 1 command that starts the network, and terminal 2 commands that send traffic. Scenarios with the same run ID share one network. For the others, press Ctrl-C in terminal 1 and start it again with the new command. Every output below was produced by running these commands. Times and IDs will differ.
 
 ### Probe and echo
@@ -448,6 +450,7 @@ python -m scripts.make_routes
 
 | Command | What it does |
 |---|---|
+| `python -m scripts.run_acceptance` | Runs and checks every core acceptance scenario (spec section 6.1), with logs and a summary in `results/acceptance/` |
 | `python -m scripts.launch ...` | One run: starts the 4 routers and host2, runs host1's probes, stops everything |
 | `python -m scripts.run_baseline` | The whole baseline matrix (12 runs) |
 | `python -m scripts.metrics <folder>` | Reads every run's logs; prints a table, writes `runs.csv` and `conditions.csv` |

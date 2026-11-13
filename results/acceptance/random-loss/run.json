@@ -1,0 +1,94 @@
+{
+  "run_id": "random-loss",
+  "seed": 7,
+  "router_seeds": {
+    "routerA": 70,
+    "routerB": 71,
+    "routerC": 72,
+    "routerD": 73
+  },
+  "base_config": "config/topology_upper.json",
+  "link": "routerB-routerD",
+  "loss": 0.3,
+  "delay_ms": null,
+  "links": [
+    {
+      "endpoints": [
+        "host1",
+        "routerA"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerB"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerC"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerB",
+        "routerD"
+      ],
+      "loss": 0.3,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerC",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerD",
+        "host2"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    }
+  ],
+  "paths": {
+    "forward": [
+      "host1",
+      "routerA",
+      "routerB",
+      "routerD",
+      "host2"
+    ],
+    "return": [
+      "host2",
+      "routerD",
+      "routerB",
+      "routerA",
+      "host1"
+    ]
+  },
+  "drop_rules": {},
+  "code_version": "core-checkpoint-16-gea445ab",
+  "python": "3.13.7",
+  "kind": "acceptance",
+  "responder": "host2",
+  "steps": [
+    {
+      "step": "probe",
+      "command": "python -m src.host --name host1 --probe host2 --count 20 --interval 0.05 --timeout 0.5 --config results/acceptance/random-loss/config.json --run-id random-loss --log-dir results/acceptance",
+      "exit_code": 1,
+      "summary": "8/20 probes answered"
+    }
+  ],
+  "duration_s": 7.252
+}

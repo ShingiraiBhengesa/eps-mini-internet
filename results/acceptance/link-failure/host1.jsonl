@@ -1,0 +1,7 @@
+{"run_id":"link-failure","device":"host1","timestamp":1794528854.626521,"event":"started","mode":"probe","endpoint":"127.0.0.1:5001","gateway":"routerA","hop_limit":16}
+{"run_id":"link-failure","device":"host1","timestamp":1794528854.6267252,"event":"sent","message_id":"host1-cdc890c7-1","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"link-failure","device":"host1","timestamp":1794528855.1278322,"event":"probe_timeout","message_id":"host1-cdc890c7-1","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"timeout_s":0.5}
+{"run_id":"link-failure","device":"host1","timestamp":1794528855.2321541,"event":"sent","message_id":"host1-cdc890c7-2","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"link-failure","device":"host1","timestamp":1794528855.7332711,"event":"probe_timeout","message_id":"host1-cdc890c7-2","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"timeout_s":0.5}
+{"run_id":"link-failure","device":"host1","timestamp":1794528855.835723,"event":"sent","message_id":"host1-cdc890c7-3","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"link-failure","device":"host1","timestamp":1794528856.3366919,"event":"probe_timeout","message_id":"host1-cdc890c7-3","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"timeout_s":0.5}

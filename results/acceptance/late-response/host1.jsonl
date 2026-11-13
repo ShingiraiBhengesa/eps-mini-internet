@@ -1,0 +1,11 @@
+{"run_id":"late-response","device":"host1","timestamp":1794528867.680884,"event":"started","mode":"probe","endpoint":"127.0.0.1:5001","gateway":"routerA","hop_limit":16}
+{"run_id":"late-response","device":"host1","timestamp":1794528867.681091,"event":"sent","message_id":"host1-a8de7867-1","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"late-response","device":"host1","timestamp":1794528868.1821299,"event":"probe_timeout","message_id":"host1-a8de7867-1","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"timeout_s":0.5}
+{"run_id":"late-response","device":"host1","timestamp":1794528868.387458,"event":"sent","message_id":"host1-a8de7867-2","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"late-response","device":"host1","timestamp":1794528868.3876748,"event":"received","message_id":"host1-a8de7867-1","type":"ECHO","src":"host2","dst":"host1","hop_limit":13}
+{"run_id":"late-response","device":"host1","timestamp":1794528868.387699,"event":"dropped_unexpected_echo","message_id":"host1-a8de7867-1","type":"ECHO","src":"host2","dst":"host1","hop_limit":13}
+{"run_id":"late-response","device":"host1","timestamp":1794528868.8882308,"event":"probe_timeout","message_id":"host1-a8de7867-2","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"timeout_s":0.5}
+{"run_id":"late-response","device":"host1","timestamp":1794528869.0937338,"event":"sent","message_id":"host1-a8de7867-3","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"late-response","device":"host1","timestamp":1794528869.094029,"event":"received","message_id":"host1-a8de7867-2","type":"ECHO","src":"host2","dst":"host1","hop_limit":13}
+{"run_id":"late-response","device":"host1","timestamp":1794528869.0940878,"event":"dropped_unexpected_echo","message_id":"host1-a8de7867-2","type":"ECHO","src":"host2","dst":"host1","hop_limit":13}
+{"run_id":"late-response","device":"host1","timestamp":1794528869.594857,"event":"probe_timeout","message_id":"host1-a8de7867-3","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"timeout_s":0.5}

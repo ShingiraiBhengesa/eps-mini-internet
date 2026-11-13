@@ -1,0 +1,3 @@
+{"run_id":"error-handling","device":"host2","timestamp":1794528852.9819992,"event":"started","mode":"serve","endpoint":"127.0.0.1:5002","gateway":"routerD","hop_limit":16}
+{"run_id":"error-handling","device":"host2","timestamp":1794528854.455318,"event":"received","message_id":"host1-42125bda-1","type":"PROBE","src":"host1","dst":"host2","hop_limit":13}
+{"run_id":"error-handling","device":"host2","timestamp":1794528854.455379,"event":"sent","message_id":"host1-42125bda-1","type":"ECHO","src":"host2","dst":"host1","hop_limit":16,"next_hop":"routerD"}

@@ -1,0 +1,34 @@
+scenario,title,check,passed,detail
+multihop-host1,"1. Multihop communication, from host1","20 probes from host1, 20 matching echoes",True,20 of 20 answered
+multihop-host1,"1. Multihop communication, from host1","every echo matched its probe's ID, sender and payload",True,"0 payload mismatches, 0 unexpected echoes"
+multihop-host1,"1. Multihop communication, from host1","probe 1 traced through every router, out and back",True,host1 → routerA → routerB → routerD → host2 → routerD → routerB → routerA → host1
+multihop-host1,"1. Multihop communication, from host1",nothing forwarded by routerC (upper path only),True,
+multihop-host2,"1. Multihop communication, from host2","20 probes from host2, 20 matching echoes",True,20 of 20 answered
+multihop-host2,"1. Multihop communication, from host2","every echo matched its probe's ID, sender and payload",True,"0 payload mismatches, 0 unexpected echoes"
+multihop-host2,"1. Multihop communication, from host2","probe 1 traced through every router, out and back",True,host2 → routerD → routerB → routerA → host1 → routerA → routerB → routerD → host2
+multihop-host2,"1. Multihop communication, from host2",nothing forwarded by routerC (upper path only),True,
+path-lower,2. Configurable paths: lower path (upper path: scenario 1),10 probes answered over the lower path,True,10 of 10
+path-lower,2. Configurable paths: lower path (upper path: scenario 1),probe 1 went through routerC both ways,True,host1 → routerA → routerC → routerD → host2 → routerD → routerC → routerA → host1
+path-lower,2. Configurable paths: lower path (upper path: scenario 1),nothing forwarded by routerB,True,
+hop-limit-loop,3. Hop-limit enforcement on a forwarding loop,"routerA and routerB bounce the probe, hop limit 5 down to 1",True,"routerA 5, routerB 4, routerA 3, routerB 2, routerA 1"
+hop-limit-loop,3. Hop-limit enforcement on a forwarding loop,routerB discards it: hop_limit_exhausted at hop limit 1,True,
+hop-limit-loop,3. Hop-limit enforcement on a forwarding loop,host1 times out instead of waiting forever,True,
+error-handling,"4. Error handling: unknown destination, invalid packet",unknown destination: routerA logs the reason and drops the probe,True,
+error-handling,"4. Error handling: unknown destination, invalid packet",the waiting host times out,True,
+error-handling,"4. Error handling: unknown destination, invalid packet",invalid packet: routerA logs malformed_packet and drops it,True,
+error-handling,"4. Error handling: unknown destination, invalid packet",the processes keep running: the next probe is answered,True,
+link-failure,4. Error handling: missing response after a link failure,routerB–routerD down (100% loss): every probe is dropped at routerB,True,
+link-failure,4. Error handling: missing response after a link failure,"missing replies end in explicit timeouts, 0.5 s each",True,3 timeouts; host1 exit code 1
+forced-drop,5. Loss and delay: one forced drop,"exactly probe 3 is dropped, by the forced rule at routerB",True,
+forced-drop,5. Loss and delay: one forced drop,probe 3 times out; the other 4 are answered,True,"answered, answered, timed out, answered, answered"
+forced-drop,5. Loss and delay: one forced drop,no random drops,True,
+random-loss,"5. Loss and delay: random loss (30%, seed 7)","some probes lost at random, the rest answered",True,"8 answered, 12 timed out"
+random-loss,"5. Loss and delay: random loss (30%, seed 7)",every timeout matches exactly one drop_injected; no answered probe was dropped,True,
+random-loss,"5. Loss and delay: random loss (30%, seed 7)",seeds and the lossy link are logged at startup,True,"routerB seed 71, routerD seed 73 (run seed 7)"
+added-delay,5. Loss and delay: added delay (80 ms),"all 10 answered, each round trip at least 2 × 80 ms",True,round trip 163.6 to 167.1 ms
+added-delay,5. Loss and delay: added delay (80 ms),routerB and routerD hold each packet 80 ms on that link,True,
+late-response,"5. Loss and delay: a late response, told apart from a drop",all 3 probes time out at 0.5 s (round trip about 600 ms),True,
+late-response,"5. Loss and delay: a late response, told apart from a drop",no drop is logged for any of them,True,
+late-response,"5. Loss and delay: a late response, told apart from a drop","each echo still reaches host1's link, after the timeout",True,"echo sent to host1 after 605 ms, 605 ms, 606 ms"
+late-response,"5. Loss and delay: a late response, told apart from a drop",host1 logs the late echoes it receives as dropped_unexpected_echo,True,
+all,Neighbor-only sends,every send and forward goes to a configured neighbor,True,1160 sends and forwards checked

@@ -1,0 +1,1 @@
+{"run_id":"path-lower","device":"routerB","timestamp":1794528850.5893629,"event":"started","endpoint":"127.0.0.1:5102","seed":1,"links":[{"neighbor":"routerA","loss":0.0,"delay_ms":0},{"neighbor":"routerD","loss":0.0,"delay_ms":0}],"drop_rules":[]}

@@ -1,0 +1,3 @@
+{"run_id":"hop-limit-loop","device":"host1","timestamp":1794528851.8574731,"event":"started","mode":"probe","endpoint":"127.0.0.1:5001","gateway":"routerA","hop_limit":6}
+{"run_id":"hop-limit-loop","device":"host1","timestamp":1794528851.85769,"event":"sent","message_id":"host1-a81dc338-1","type":"PROBE","src":"host1","dst":"routerD","hop_limit":6,"next_hop":"routerA"}
+{"run_id":"hop-limit-loop","device":"host1","timestamp":1794528852.858968,"event":"probe_timeout","message_id":"host1-a81dc338-1","type":"PROBE","src":"host1","dst":"routerD","hop_limit":6,"timeout_s":1.0}

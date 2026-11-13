@@ -1,0 +1,148 @@
+{
+  "devices": {
+    "host1": {
+      "virtual_address": "host1",
+      "role": "host",
+      "udp_host": "127.0.0.1",
+      "udp_port": 5001,
+      "neighbors": [
+        "routerA"
+      ],
+      "gateway": "routerA"
+    },
+    "host2": {
+      "virtual_address": "host2",
+      "role": "host",
+      "udp_host": "127.0.0.1",
+      "udp_port": 5002,
+      "neighbors": [
+        "routerD"
+      ],
+      "gateway": "routerD"
+    },
+    "routerA": {
+      "virtual_address": "routerA",
+      "role": "router",
+      "udp_host": "127.0.0.1",
+      "udp_port": 5101,
+      "neighbors": [
+        "host1",
+        "routerB",
+        "routerC"
+      ],
+      "forwarding_table": {
+        "host1": "host1",
+        "host2": "routerC"
+      }
+    },
+    "routerB": {
+      "virtual_address": "routerB",
+      "role": "router",
+      "udp_host": "127.0.0.1",
+      "udp_port": 5102,
+      "neighbors": [
+        "routerA",
+        "routerD"
+      ],
+      "forwarding_table": {
+        "host1": "routerA",
+        "host2": "routerD"
+      }
+    },
+    "routerC": {
+      "virtual_address": "routerC",
+      "role": "router",
+      "udp_host": "127.0.0.1",
+      "udp_port": 5103,
+      "neighbors": [
+        "routerA",
+        "routerD"
+      ],
+      "forwarding_table": {
+        "host1": "routerA",
+        "host2": "routerD"
+      }
+    },
+    "routerD": {
+      "virtual_address": "routerD",
+      "role": "router",
+      "udp_host": "127.0.0.1",
+      "udp_port": 5104,
+      "neighbors": [
+        "host2",
+        "routerB",
+        "routerC"
+      ],
+      "forwarding_table": {
+        "host1": "routerC",
+        "host2": "host2"
+      }
+    }
+  },
+  "links": [
+    {
+      "endpoints": [
+        "host1",
+        "routerA"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerB"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerC"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerB",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerC",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerD",
+        "host2"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    }
+  ],
+  "paths": {
+    "forward": [
+      "host1",
+      "routerA",
+      "routerC",
+      "routerD",
+      "host2"
+    ],
+    "return": [
+      "host2",
+      "routerD",
+      "routerC",
+      "routerA",
+      "host1"
+    ]
+  }
+}

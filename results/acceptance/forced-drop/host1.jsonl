@@ -1,0 +1,15 @@
+{"run_id":"forced-drop","device":"host1","timestamp":1794528856.518917,"event":"started","mode":"probe","endpoint":"127.0.0.1:5001","gateway":"routerA","hop_limit":16}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528856.5191228,"event":"sent","message_id":"host1-2ee6662a-1","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528856.5208042,"event":"received","message_id":"host1-2ee6662a-1","type":"ECHO","src":"host2","dst":"host1","hop_limit":13}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528856.520822,"event":"echo_received","message_id":"host1-2ee6662a-1","type":"ECHO","src":"host2","dst":"host1","hop_limit":13,"rtt_ms":1.748,"payload_bytes":10}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528856.62168,"event":"sent","message_id":"host1-2ee6662a-2","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528856.622423,"event":"received","message_id":"host1-2ee6662a-2","type":"ECHO","src":"host2","dst":"host1","hop_limit":13}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528856.622441,"event":"echo_received","message_id":"host1-2ee6662a-2","type":"ECHO","src":"host2","dst":"host1","hop_limit":13,"rtt_ms":0.868,"payload_bytes":10}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528856.7234402,"event":"sent","message_id":"host1-2ee6662a-3","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528857.2245061,"event":"probe_timeout","message_id":"host1-2ee6662a-3","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"timeout_s":0.5}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528857.329827,"event":"sent","message_id":"host1-2ee6662a-4","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528857.332737,"event":"received","message_id":"host1-2ee6662a-4","type":"ECHO","src":"host2","dst":"host1","hop_limit":13}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528857.332785,"event":"echo_received","message_id":"host1-2ee6662a-4","type":"ECHO","src":"host2","dst":"host1","hop_limit":13,"rtt_ms":3.179,"payload_bytes":10}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528857.4353569,"event":"sent","message_id":"host1-2ee6662a-5","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528857.437772,"event":"received","message_id":"host1-2ee6662a-5","type":"ECHO","src":"host2","dst":"host1","hop_limit":13}
+{"run_id":"forced-drop","device":"host1","timestamp":1794528857.437827,"event":"echo_received","message_id":"host1-2ee6662a-5","type":"ECHO","src":"host2","dst":"host1","hop_limit":13,"rtt_ms":2.691,"payload_bytes":10}

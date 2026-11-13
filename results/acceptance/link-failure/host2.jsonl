@@ -1,0 +1,1 @@
+{"run_id":"link-failure","device":"host2","timestamp":1794528854.512981,"event":"started","mode":"serve","endpoint":"127.0.0.1:5002","gateway":"routerD","hop_limit":16}
