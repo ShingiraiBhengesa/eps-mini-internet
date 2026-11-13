@@ -1,0 +1,103 @@
+{
+  "run_id": "trackb-gbn1-l0-s202",
+  "seed": 202,
+  "router_seeds": {
+    "routerA": 2020,
+    "routerB": 2021,
+    "routerC": 2022,
+    "routerD": 2023
+  },
+  "base_config": "config/topology_upper.json",
+  "link": "routerB-routerD",
+  "loss": 0.0,
+  "delay_ms": 20,
+  "links": [
+    {
+      "endpoints": [
+        "host1",
+        "routerA"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerB"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerC"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerB",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 20
+    },
+    {
+      "endpoints": [
+        "routerC",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerD",
+        "host2"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    }
+  ],
+  "paths": {
+    "forward": [
+      "host1",
+      "routerA",
+      "routerB",
+      "routerD",
+      "host2"
+    ],
+    "return": [
+      "host2",
+      "routerD",
+      "routerB",
+      "routerA",
+      "host1"
+    ]
+  },
+  "drop_rules": {},
+  "code_version": "core-checkpoint-19-g1d686f1",
+  "python": "3.13.7",
+  "kind": "transfer",
+  "condition": "go-back-n window 1, loss 0%",
+  "sender": "host1",
+  "receiver": "host2",
+  "receiver_started": true,
+  "mode": "gobackn",
+  "window": 1,
+  "count": 50,
+  "rate": 50.0,
+  "timeout_s": 0.3,
+  "retries": 5,
+  "linger_s": 2.0,
+  "observe_s": null,
+  "transfer_id": "trackb-gbn1-l0-s202",
+  "started_at": "2026-11-13T00:03:56.168837+00:00",
+  "receiver_exited_by_itself": true,
+  "finished_at": "2026-11-13T00:04:00.694340+00:00",
+  "duration_s": 4.526,
+  "sender_exit_code": 0,
+  "sender_summary": "go-back-n (window 1): 50/50 messages acknowledged, 0 retransmissions, 2.30 s"
+}

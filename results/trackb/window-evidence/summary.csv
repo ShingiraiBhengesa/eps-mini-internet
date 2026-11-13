@@ -1,0 +1,6 @@
+case,what,result,delivered,in_order,duplicates_at_receiver,retransmissions,max_in_flight,out_of_order_discards,sender_success,sender_elapsed_s,receiver_stop
+no-loss,"0% loss: every message once, in order, with the window of 4 filled",PASS,10/10,True,0,0,4,0,True,0.146,linger_over
+data-drop,"DATA 5 dropped once at routerB: the receiver discards what follows the gap, and the sender goes back to 5 and resends what was in flight",PASS,10/10,True,0,4,4,3,True,0.485,linger_over
+lost-ack,"ACK 3 dropped once at routerD: the next cumulative ACK covers it, so nothing is resent",PASS,10/10,True,0,0,4,0,True,0.16,linger_over
+final-ack-drop,"final ACK (message 10) dropped once at routerD: the sender resends it, the lingering receiver ACKs again",PASS,10/10,True,1,1,4,0,True,0.482,linger_over
+unreachable,host2 not running: each timeout resends the window of 4; the sender gives up after its retry limit,PASS,0/10,True,0,20,4,0,False,1.815,
