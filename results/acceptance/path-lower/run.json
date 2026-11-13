@@ -1,0 +1,94 @@
+{
+  "run_id": "path-lower",
+  "seed": 0,
+  "router_seeds": {
+    "routerA": 0,
+    "routerB": 1,
+    "routerC": 2,
+    "routerD": 3
+  },
+  "base_config": "config/topology_lower.json",
+  "link": null,
+  "loss": null,
+  "delay_ms": null,
+  "links": [
+    {
+      "endpoints": [
+        "host1",
+        "routerA"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerB"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerC"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerB",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerC",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerD",
+        "host2"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    }
+  ],
+  "paths": {
+    "forward": [
+      "host1",
+      "routerA",
+      "routerC",
+      "routerD",
+      "host2"
+    ],
+    "return": [
+      "host2",
+      "routerD",
+      "routerC",
+      "routerA",
+      "host1"
+    ]
+  },
+  "drop_rules": {},
+  "code_version": "core-checkpoint-16-gea445ab",
+  "python": "3.13.7",
+  "kind": "acceptance",
+  "responder": "host2",
+  "steps": [
+    {
+      "step": "probe",
+      "command": "python -m src.host --name host1 --probe host2 --count 10 --interval 0.1 --timeout 1.0 --config results/acceptance/path-lower/config.json --run-id path-lower --log-dir results/acceptance",
+      "exit_code": 0,
+      "summary": "10/10 probes answered"
+    }
+  ],
+  "duration_s": 1.132
+}

@@ -1,0 +1,7 @@
+{"run_id":"error-handling","device":"host1","timestamp":1794528853.0798972,"event":"started","mode":"probe","endpoint":"127.0.0.1:5001","gateway":"routerA","hop_limit":16}
+{"run_id":"error-handling","device":"host1","timestamp":1794528853.0802891,"event":"sent","message_id":"host1-0c1764df-1","type":"PROBE","src":"host1","dst":"routerB","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"error-handling","device":"host1","timestamp":1794528854.0814688,"event":"probe_timeout","message_id":"host1-0c1764df-1","type":"PROBE","src":"host1","dst":"routerB","hop_limit":16,"timeout_s":1.0}
+{"run_id":"error-handling","device":"host1","timestamp":1794528854.454311,"event":"started","mode":"probe","endpoint":"127.0.0.1:5001","gateway":"routerA","hop_limit":16}
+{"run_id":"error-handling","device":"host1","timestamp":1794528854.454476,"event":"sent","message_id":"host1-42125bda-1","type":"PROBE","src":"host1","dst":"host2","hop_limit":16,"next_hop":"routerA"}
+{"run_id":"error-handling","device":"host1","timestamp":1794528854.455737,"event":"received","message_id":"host1-42125bda-1","type":"ECHO","src":"host2","dst":"host1","hop_limit":13}
+{"run_id":"error-handling","device":"host1","timestamp":1794528854.4557528,"event":"echo_received","message_id":"host1-42125bda-1","type":"ECHO","src":"host2","dst":"host1","hop_limit":13,"rtt_ms":1.33,"payload_bytes":10}

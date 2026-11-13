@@ -1,0 +1,105 @@
+{
+  "run_id": "error-handling",
+  "seed": 0,
+  "router_seeds": {
+    "routerA": 0,
+    "routerB": 1,
+    "routerC": 2,
+    "routerD": 3
+  },
+  "base_config": "config/topology_upper.json",
+  "link": null,
+  "loss": null,
+  "delay_ms": null,
+  "links": [
+    {
+      "endpoints": [
+        "host1",
+        "routerA"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerB"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerC"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerB",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerC",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerD",
+        "host2"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    }
+  ],
+  "paths": {
+    "forward": [
+      "host1",
+      "routerA",
+      "routerB",
+      "routerD",
+      "host2"
+    ],
+    "return": [
+      "host2",
+      "routerD",
+      "routerB",
+      "routerA",
+      "host1"
+    ]
+  },
+  "drop_rules": {},
+  "code_version": "core-checkpoint-16-gea445ab",
+  "python": "3.13.7",
+  "kind": "acceptance",
+  "responder": "host2",
+  "steps": [
+    {
+      "step": "probe",
+      "command": "python -m src.host --name host1 --probe routerB --count 1 --interval 0.2 --timeout 1.0 --config results/acceptance/error-handling/config.json --run-id error-handling --log-dir results/acceptance",
+      "exit_code": 1,
+      "summary": "0/1 probes answered"
+    },
+    {
+      "step": "garbage",
+      "to": "routerA 127.0.0.1:5101",
+      "bytes": "not a packet"
+    },
+    {
+      "step": "probe",
+      "command": "python -m src.host --name host1 --probe host2 --count 1 --interval 0.2 --timeout 1.0 --config results/acceptance/error-handling/config.json --run-id error-handling --log-dir results/acceptance",
+      "exit_code": 0,
+      "summary": "1/1 probes answered"
+    }
+  ],
+  "duration_s": 1.55
+}

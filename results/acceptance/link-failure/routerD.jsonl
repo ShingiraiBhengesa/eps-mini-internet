@@ -1,0 +1,1 @@
+{"run_id":"link-failure","device":"routerD","timestamp":1794528854.506521,"event":"started","endpoint":"127.0.0.1:5104","seed":3,"links":[{"neighbor":"host2","loss":0.0,"delay_ms":0},{"neighbor":"routerB","loss":1.0,"delay_ms":0},{"neighbor":"routerC","loss":0.0,"delay_ms":0}],"drop_rules":[]}
