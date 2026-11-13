@@ -331,8 +331,8 @@ class StopAndWaitSender:
     def _why_ignored(self, ack):
         parsed = parse_message_id(ack["message_id"])
         if parsed and parsed[:2] == (self.mode, self.transfer):
-            return "late or duplicate ACK for an earlier message"
-        return "ACK for another transfer"
+            return "a late or duplicate ACK for an earlier message"
+        return "an ACK for another transfer"
 
     def _finish(self, start, acked, retransmissions, failed_at=None):
         summary = {
@@ -465,15 +465,15 @@ class GoBackNSender:
 
         parsed = parse_message_id(reply["message_id"])
         if reply["src"] != self.dst or not parsed or parsed[:2] != (self.mode, self.transfer):
-            self.log("ack_ignored", reply, reason="ACK for another transfer")
+            self.log("ack_ignored", reply, reason="an ACK for another transfer")
             return None
         k = parsed[2]
         if k < self.base:
-            self.log("ack_ignored", reply, reason="duplicate ACK: everything up to "
-                     f"#{k} was already acknowledged")
+            self.log("ack_ignored", reply, reason=f"a duplicate ACK for #{k}: everything "
+                     f"up to #{k} is already acknowledged")
             return None
         if k > self.highest_sent:
-            self.log("ack_ignored", reply, reason=f"ACK for #{k}, which was never sent")
+            self.log("ack_ignored", reply, reason=f"an ACK for #{k}, which was never sent")
             return None
 
         rtt_ms = (self.clock() - self.sent_at[k]) * 1000

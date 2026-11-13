@@ -334,7 +334,7 @@ def test_late_and_duplicate_acks_are_ignored(link):
     ignored = [d["reason"] for e, d in link["events"] if e == "ack_ignored"]
     assert summary["success"] is True
     assert summary["retransmissions"] == 0
-    assert ignored and set(ignored) == {"late or duplicate ACK for an earlier message"}
+    assert ignored and set(ignored) == {"a late or duplicate ACK for an earlier message"}
     assert delivered(net.remote) == [1, 2, 3, 4, 5]
 
 

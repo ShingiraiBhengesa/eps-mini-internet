@@ -80,7 +80,7 @@ def describe_track_b(record):
             text += f"; going back to resend {count(get('in_flight'), 'message')}"
         return text
     if event == "ack_ignored":
-        return f"ignores an ACK: {get('reason')}"
+        return f"ignores {get('reason')}"
     if event == "transfer_failed":
         return f"GIVES UP on #{get('seq')} after {get('attempts')} attempts"
     if event == "transfer_done":
