@@ -597,3 +597,13 @@ def test_go_back_n_through_routers_with_forced_drops():
 def test_cli_rejects_a_zero_window(capsys):
     assert main(["send", "--name", "host1", "--to", "host2", "--mode", "gobackn", "--window", "0"]) == 2
     assert "--window" in capsys.readouterr().err
+
+
+def test_go_back_n_reads_acks_between_paced_sends(link):
+    # ACKs come back at once and sends are 20 ms apart, so even a window of 8
+    # should never have more than one message in flight.
+    with FakeNetwork(link):
+        summary = go_back_n(link, count=5, window=8, rate=50).run()
+
+    assert summary["success"] is True
+    assert in_flight(link["events"]) == 1

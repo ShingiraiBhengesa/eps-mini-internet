@@ -233,6 +233,12 @@ class Pacer:
         self.sleep = sleep
         self.next_at = None
 
+    def ready_in(self):
+        """Seconds until the next send is allowed (0 = now)."""
+        if self.next_at is None:
+            return 0.0
+        return max(0.0, self.next_at - self.clock())
+
     def wait(self):
         now = self.clock()
         if self.next_at is not None and now < self.next_at:
@@ -347,14 +353,15 @@ class GoBackNSender:
     """Go-Back-N sliding window: up to `window` messages in flight at once.
 
     This is the optional enhancement; stop-and-wait above is unchanged. The
-    sender fills the window, then waits. One timer runs for the oldest
+    sender sends new messages while the window has room and the rate limit
+    allows, and reads ACKs in every pause. One timer runs for the oldest
     unacknowledged message (the base). A cumulative ACK for message k slides
     the window to k + 1 and restarts the timer if messages are still in
-    flight. When the timer expires, the sender goes back: it resends every
-    message from the base onwards, counting each as a retransmission. After
-    `retries` timeouts in a row without the base moving, it gives up. Late or
-    duplicate ACKs (for messages already acknowledged) are ignored. With a
-    window of 1 it behaves like stop-and-wait.
+    flight. When the timer expires, the sender goes back: it rewinds to the
+    base and sends everything from there again, counting each resend as a
+    retransmission. After `retries` timeouts in a row without the base moving,
+    it gives up. Late or duplicate ACKs (for messages already acknowledged)
+    are ignored. With a window of 1 it behaves like stop-and-wait.
     """
 
     mode = "gobackn"
@@ -372,10 +379,12 @@ class GoBackNSender:
         self.rate = rate
         self.clock = clock
         self.pacer = Pacer(rate, clock, sleep)
-        self.base = 1          # oldest message not yet acknowledged
-        self.next_seq = 1      # next new message to send
-        self.attempts = {}     # message -> times sent
-        self.sent_at = {}      # message -> when it was last sent
+        self.base = 1            # oldest message not yet acknowledged
+        self.next_seq = 1        # next message to send (rewound on a timeout)
+        self.highest_sent = 0    # highest message ever sent
+        self.attempts = {}       # message -> times sent
+        self.sent_at = {}        # message -> when it was last sent
+        self.retransmissions = 0
 
     def log(self, event, packet=None, **details):
         self.host.log(self.host.name, event, packet, **details)
@@ -389,8 +398,10 @@ class GoBackNSender:
         self.pacer.wait()
         self.attempts[seq] = self.attempts.get(seq, 0) + 1
         if self.attempts[seq] > 1:
+            self.retransmissions += 1
             self.log("retransmit", packet, seq=seq, attempt=self.attempts[seq])
         self.sent_at[seq] = self.clock()
+        self.highest_sent = max(self.highest_sent, seq)
         self.host._send(packet)
 
     def run(self):
@@ -398,43 +409,47 @@ class GoBackNSender:
                  dst=self.dst, messages=self.count, window=self.window,
                  rate=self.rate, timeout_s=self.timeout, retries=self.retries)
         start = self.clock()
-        timer = None           # when the base was last sent
-        stalls = 0             # timeouts in a row without the base moving
-        retransmissions = 0
+        timer = None             # when the base was last sent
+        stalls = 0               # timeouts in a row without the base moving
 
         while self.base <= self.count:
-            # Fill the window with new messages.
-            while self.next_seq <= self.count and self.next_seq < self.base + self.window:
+            if timer is not None and self.clock() >= timer + self.timeout:
+                # Timeout: go back to the base and send everything from there again.
+                stalls += 1
+                self.log("ack_timeout", self._packet(self.base), seq=self.base,
+                         attempt=self.attempts[self.base], timeout_s=self.timeout,
+                         in_flight=self.next_seq - self.base)
+                if stalls > self.retries:
+                    self.log("transfer_failed", self._packet(self.base), seq=self.base,
+                             attempts=self.attempts[self.base])
+                    return self._finish(start, self.base - 1, failed_at=self.base)
+                self.next_seq = self.base
+                timer = None
+                continue
+
+            room = self.next_seq <= self.count and self.next_seq < self.base + self.window
+            if room and self.pacer.ready_in() == 0:
                 self._send(self.next_seq)
                 if self.next_seq == self.base:
                     timer = self.sent_at[self.base]
                 self.next_seq += 1
-
-            remaining = timer + self.timeout - self.clock()
-            if remaining > 0:
-                acked = self._receive_ack(remaining)
-                if acked is not None:
-                    self.base = acked + 1
-                    stalls = 0
-                    timer = self.clock() if self.base < self.next_seq else None
                 continue
 
-            # Timeout: go back and resend everything from the base.
-            stalls += 1
-            self.log("ack_timeout", self._packet(self.base), seq=self.base,
-                     attempt=self.attempts[self.base], timeout_s=self.timeout,
-                     in_flight=self.next_seq - self.base)
-            if stalls > self.retries:
-                self.log("transfer_failed", self._packet(self.base), seq=self.base,
-                         attempts=self.attempts[self.base])
-                return self._finish(start, self.base - 1, retransmissions, failed_at=self.base)
-            for seq in range(self.base, self.next_seq):
-                self._send(seq)
-                retransmissions += 1
-                if seq == self.base:
-                    timer = self.sent_at[seq]
+            # Wait for an ACK until the next send is allowed or the timer runs out.
+            waits = [timer + self.timeout - self.clock()] if timer is not None else []
+            if room:
+                waits.append(self.pacer.ready_in())
+            wait = min(waits)
+            if wait <= 0:
+                continue
+            acked = self._receive_ack(wait)
+            if acked is not None:
+                self.base = acked + 1
+                self.next_seq = max(self.next_seq, self.base)
+                stalls = 0
+                timer = self.clock() if self.base < self.next_seq else None
 
-        return self._finish(start, self.count, retransmissions)
+        return self._finish(start, self.count)
 
     def _receive_ack(self, wait):
         """Wait up to `wait` seconds; return k for a new cumulative ACK, else None."""
@@ -457,7 +472,7 @@ class GoBackNSender:
             self.log("ack_ignored", reply, reason="duplicate ACK: everything up to "
                      f"#{k} was already acknowledged")
             return None
-        if k >= self.next_seq:
+        if k > self.highest_sent:
             self.log("ack_ignored", reply, reason=f"ACK for #{k}, which was never sent")
             return None
 
@@ -467,14 +482,14 @@ class GoBackNSender:
                  rtt_ms=round(rtt_ms, 3))
         return k
 
-    def _finish(self, start, acked, retransmissions, failed_at=None):
+    def _finish(self, start, acked, failed_at=None):
         summary = {
             "mode": self.mode,
             "transfer": self.transfer,
             "window": self.window,
             "messages": self.count,
             "acked": acked,
-            "retransmissions": retransmissions,
+            "retransmissions": self.retransmissions,
             "elapsed_s": round(self.clock() - start, 3),
             "success": failed_at is None,
             "failed_at": failed_at,
