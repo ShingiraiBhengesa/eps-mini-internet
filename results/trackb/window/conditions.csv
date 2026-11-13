@@ -1,0 +1,9 @@
+condition,mode,window,link,loss,delay_ms,runs,seeds,messages,delivered,delivered_fraction,delivered_sd,full_sequence_runs,retransmissions,retransmissions_per_run,duplicates_at_receiver,out_of_order_discards,max_in_flight,data_sent,delivery_time_mean_s,delivery_time_sd_s,sender_elapsed_mean_s,sender_elapsed_sd_s,incomplete_runs
+"go-back-n window 1, loss 0%",gobackn,1,routerB-routerD,0.0,20,3,201 202 203,150,150,1.0,0.0,3,0,0.0,0,0,1,150,2.288,0.008,2.313,0.009,0
+"go-back-n window 2, loss 0%",gobackn,2,routerB-routerD,0.0,20,3,204 205 206,150,150,1.0,0.0,3,0,0.0,0,0,2,150,1.128,0.012,1.151,0.013,0
+"go-back-n window 4, loss 0%",gobackn,4,routerB-routerD,0.0,20,3,207 208 209,150,150,1.0,0.0,3,0,0.0,0,0,3,150,1.105,0.002,1.128,0.001,0
+"go-back-n window 8, loss 0%",gobackn,8,routerB-routerD,0.0,20,3,210 211 212,150,150,1.0,0.0,3,0,0.0,0,0,3,150,1.102,0.005,1.126,0.006,0
+"go-back-n window 1, loss 5%",gobackn,1,routerB-routerD,0.05,20,3,213 214 215,150,150,1.0,0.0,3,13,4.33,5,0,1,163,3.59,0.164,3.614,0.164,0
+"go-back-n window 2, loss 5%",gobackn,2,routerB-routerD,0.05,20,3,216 217 218,150,150,1.0,0.0,3,14,4.67,2,6,2,164,1.912,0.473,1.934,0.473,0
+"go-back-n window 4, loss 5%",gobackn,4,routerB-routerD,0.05,20,3,219 220 221,150,150,1.0,0.0,3,20,6.67,0,13,4,170,1.61,0.188,1.632,0.188,0
+"go-back-n window 8, loss 5%",gobackn,8,routerB-routerD,0.05,20,3,222 223 224,150,150,1.0,0.0,3,77,25.67,0,63,8,227,2.237,1.02,2.262,1.022,0

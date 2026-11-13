@@ -1,0 +1,25 @@
+run_id,condition,seed,mode,window,link,loss,delay_ms,messages,delivered,delivered_fraction,full_sequence,in_order,duplicates_at_receiver,out_of_order_discards,max_in_flight,data_sent,retransmissions,sender_success,failed_at,sender_elapsed_s,delivery_time_s,data_drops,ack_drops,receiver_stop,sender_exit_code,complete
+trackb-gbn1-l0-s201,"go-back-n window 1, loss 0%",201,gobackn,1,routerB-routerD,0.0,20,50,50,1.0,True,True,0,0,1,50,0,True,,2.316,2.291,0,0,linger_over,0,True
+trackb-gbn1-l0-s202,"go-back-n window 1, loss 0%",202,gobackn,1,routerB-routerD,0.0,20,50,50,1.0,True,True,0,0,1,50,0,True,,2.303,2.279,0,0,linger_over,0,True
+trackb-gbn1-l0-s203,"go-back-n window 1, loss 0%",203,gobackn,1,routerB-routerD,0.0,20,50,50,1.0,True,True,0,0,1,50,0,True,,2.319,2.295,0,0,linger_over,0,True
+trackb-gbn1-l5-s213,"go-back-n window 1, loss 5%",213,gobackn,1,routerB-routerD,0.05,20,50,50,1.0,True,True,0,0,1,54,4,True,,3.518,3.494,4,0,linger_over,0,True
+trackb-gbn1-l5-s214,"go-back-n window 1, loss 5%",214,gobackn,1,routerB-routerD,0.05,20,50,50,1.0,True,True,3,0,1,54,4,True,,3.521,3.497,1,3,linger_over,0,True
+trackb-gbn1-l5-s215,"go-back-n window 1, loss 5%",215,gobackn,1,routerB-routerD,0.05,20,50,50,1.0,True,True,2,0,1,55,5,True,,3.803,3.779,3,2,linger_over,0,True
+trackb-gbn2-l0-s204,"go-back-n window 2, loss 0%",204,gobackn,2,routerB-routerD,0.0,20,50,50,1.0,True,True,0,0,2,50,0,True,,1.145,1.123,0,0,linger_over,0,True
+trackb-gbn2-l0-s205,"go-back-n window 2, loss 0%",205,gobackn,2,routerB-routerD,0.0,20,50,50,1.0,True,True,0,0,2,50,0,True,,1.142,1.119,0,0,linger_over,0,True
+trackb-gbn2-l0-s206,"go-back-n window 2, loss 0%",206,gobackn,2,routerB-routerD,0.0,20,50,50,1.0,True,True,0,0,2,50,0,True,,1.166,1.142,0,0,linger_over,0,True
+trackb-gbn2-l5-s216,"go-back-n window 2, loss 5%",216,gobackn,2,routerB-routerD,0.05,20,50,50,1.0,True,True,0,4,2,58,8,True,,2.454,2.432,4,1,linger_over,0,True
+trackb-gbn2-l5-s217,"go-back-n window 2, loss 5%",217,gobackn,2,routerB-routerD,0.05,20,50,50,1.0,True,True,2,1,2,54,4,True,,1.818,1.796,1,4,linger_over,0,True
+trackb-gbn2-l5-s218,"go-back-n window 2, loss 5%",218,gobackn,2,routerB-routerD,0.05,20,50,50,1.0,True,True,0,1,2,52,2,True,,1.529,1.507,1,4,linger_over,0,True
+trackb-gbn4-l0-s207,"go-back-n window 4, loss 0%",207,gobackn,4,routerB-routerD,0.0,20,50,50,1.0,True,True,0,0,3,50,0,True,,1.129,1.107,0,0,linger_over,0,True
+trackb-gbn4-l0-s208,"go-back-n window 4, loss 0%",208,gobackn,4,routerB-routerD,0.0,20,50,50,1.0,True,True,0,0,3,50,0,True,,1.127,1.104,0,0,linger_over,0,True
+trackb-gbn4-l0-s209,"go-back-n window 4, loss 0%",209,gobackn,4,routerB-routerD,0.0,20,50,50,1.0,True,True,0,0,3,50,0,True,,1.128,1.103,0,0,linger_over,0,True
+trackb-gbn4-l5-s219,"go-back-n window 4, loss 5%",219,gobackn,4,routerB-routerD,0.05,20,50,50,1.0,True,True,0,5,4,58,8,True,,1.739,1.716,3,4,linger_over,0,True
+trackb-gbn4-l5-s220,"go-back-n window 4, loss 5%",220,gobackn,4,routerB-routerD,0.05,20,50,50,1.0,True,True,0,3,4,54,4,True,,1.415,1.393,1,3,linger_over,0,True
+trackb-gbn4-l5-s221,"go-back-n window 4, loss 5%",221,gobackn,4,routerB-routerD,0.05,20,50,50,1.0,True,True,0,5,4,58,8,True,,1.743,1.72,3,1,linger_over,0,True
+trackb-gbn8-l0-s210,"go-back-n window 8, loss 0%",210,gobackn,8,routerB-routerD,0.0,20,50,50,1.0,True,True,0,0,3,50,0,True,,1.122,1.099,0,0,linger_over,0,True
+trackb-gbn8-l0-s211,"go-back-n window 8, loss 0%",211,gobackn,8,routerB-routerD,0.0,20,50,50,1.0,True,True,0,0,3,50,0,True,,1.132,1.108,0,0,linger_over,0,True
+trackb-gbn8-l0-s212,"go-back-n window 8, loss 0%",212,gobackn,8,routerB-routerD,0.0,20,50,50,1.0,True,True,0,0,3,50,0,True,,1.123,1.099,0,0,linger_over,0,True
+trackb-gbn8-l5-s222,"go-back-n window 8, loss 5%",222,gobackn,8,routerB-routerD,0.05,20,50,50,1.0,True,True,0,0,4,50,0,True,,1.094,1.072,0,2,linger_over,0,True
+trackb-gbn8-l5-s223,"go-back-n window 8, loss 5%",223,gobackn,8,routerB-routerD,0.05,20,50,50,1.0,True,True,0,34,8,91,41,True,,2.994,2.971,7,2,linger_over,0,True
+trackb-gbn8-l5-s224,"go-back-n window 8, loss 5%",224,gobackn,8,routerB-routerD,0.05,20,50,50,1.0,True,True,0,29,8,86,36,True,,2.697,2.667,7,4,linger_over,0,True

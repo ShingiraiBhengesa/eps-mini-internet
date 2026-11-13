@@ -197,3 +197,23 @@ def test_message_list_includes_track_b_data():
 ])
 def test_describe_track_b_events(record, expected):
     assert describe(record) == expected
+
+
+@pytest.mark.parametrize("record,expected", [
+    ({"device": "host1", "timestamp": 1.0, "event": "transfer_started", "mode": "gobackn",
+      "messages": 50, "dst": "host2", "window": 4, "timeout_s": 0.3, "retries": 5, "rate": 50},
+     "starts a Go-Back-N transfer: 50 messages to host2, window 4, 0.3 s timeout, "
+     "gives up after 5 timeouts in a row"),
+    (rec(0, "host1", "ack_received", "gbn-t-7", kind="ACK", src="host2", dst="host1",
+         seq=7, acked_through=7, newly_acked=3, rtt_ms=5.0),
+     "gets a cumulative ACK through #7: 3 messages acknowledged at once"),
+    (rec(0, "host1", "ack_timeout", "gbn-t-5", kind="DATA", seq=5, timeout_s=0.3, in_flight=4),
+     "TIMEOUT: no ACK for #5 within 0.3 s; going back to resend 4 messages"),
+    (rec(0, "host2", "dropped_out_of_order", "gbn-t-6", kind="DATA", seq=6, expected=5,
+         acked_through=4),
+     "discards DATA #6: waiting for #5, ACKs #4 again"),
+    (rec(0, "host2", "duplicate", "gbn-t-3", kind="DATA", seq=3, acked=True, acked_through=5),
+     "gets DATA #3 again: not delivered twice, ACKs #5 again"),
+])
+def test_describe_go_back_n_events(record, expected):
+    assert describe(record) == expected

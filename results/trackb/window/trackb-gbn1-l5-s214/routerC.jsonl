@@ -1,0 +1,1 @@
+{"run_id":"trackb-gbn1-l5-s214","device":"routerC","timestamp":1794528281.284708,"event":"started","endpoint":"127.0.0.1:5103","seed":2142,"links":[{"neighbor":"routerA","loss":0.0,"delay_ms":0},{"neighbor":"routerD","loss":0.0,"delay_ms":0}],"drop_rules":[]}

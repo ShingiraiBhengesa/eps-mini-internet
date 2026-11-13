@@ -59,7 +59,7 @@ If you see `No module named 'scripts'` or `No module named 'src'`, you skipped t
 python -m pytest -q
 ```
 
-Expected: `203 passed` in a few seconds.
+Expected: `221 passed` in a few seconds.
 
 ### 5. Watch the network run
 
@@ -455,6 +455,9 @@ python -m scripts.make_routes
 | `python -m scripts.run_trackb evidence` | Track B's four fixed cases, each checked automatically |
 | `python -m scripts.run_trackb compare` | Best-effort vs stop-and-wait (12 runs) |
 | `python -m scripts.plot_trackb <folder>` | Draws `trackb.png` from the comparison results |
+| `python -m scripts.run_trackb evidence --mode gobackn` | The enhancement's five fixed cases, each checked automatically |
+| `python -m scripts.run_trackb window` | Go-Back-N at windows 1, 2, 4 and 8 (24 runs) |
+| `python -m scripts.plot_window <folder>` | Draws `window.png` from the window results |
 
 Example single run:
 
@@ -522,6 +525,7 @@ The tests cover:
 - Upper and lower routing paths
 - The launcher (including a full run on spare ports) and the metrics
 - The live demo view and the packet trace
+- Go-Back-N (the enhancement): cumulative ACKs, discarding messages after a gap, going back after a lost DATA message, a lost ACK covered by a later one, a lost final ACK, giving up, never exceeding the window, reading ACKs between paced sends, and a full transfer through real routers
 - Track B: in-order delivery, duplicates ACKed again but not delivered twice, the receiver's waiting time, best-effort mode, resending a lost DATA message or after a lost final ACK, giving up after the retry limit, ignoring late or duplicate ACKs, sending rate, and a full transfer through real routers with forced drops
 
 ## Module Interfaces
@@ -535,11 +539,11 @@ The tests cover:
 - `src/conditions.py`: Applies loss, delay and forced drop rules on outgoing links.
 - `src/run_log.py`: Records network events as JSON lines, to the terminal and to per-device files.
 - `src/shutdown.py`: Stops a process cleanly on Ctrl-C or SIGTERM.
-- `src/reliable.py`: Track B: the stop-and-wait sender and receiver, the best-effort sender, and their command line.
+- `src/reliable.py`: Track B: the stop-and-wait sender and receiver, the best-effort sender, the Go-Back-N sender (the enhancement), and their command line.
 - `scripts/make_routes.py`: Generates the upper, lower and loop configs.
 - `scripts/launch.py`, `scripts/run_baseline.py`, `scripts/metrics.py`, `scripts/plot_results.py`: Experiment tools.
 - `scripts/demo_net.py`, `scripts/trace.py`: Live demo view and packet tracing.
-- `scripts/run_trackb.py`, `scripts/plot_trackb.py`: Track B evidence, comparison runs and chart.
+- `scripts/run_trackb.py`, `scripts/plot_trackb.py`, `scripts/plot_window.py`: Track B and enhancement evidence, comparison runs and charts.
 
 ## Track B: Reliable Transfer
 
@@ -614,7 +618,8 @@ python -m src.reliable send --name host1 --to host2 --count 20
 
 | Option | Default | Meaning |
 |---|---|---|
-| `send --mode` | `stopwait` | `stopwait` or `besteffort` |
+| `send --mode` | `stopwait` | `stopwait`, `besteffort`, or `gobackn` (the enhancement) |
+| `send --window` | 4 | Go-Back-N only: most messages in flight at once |
 | `send --count` | 20 | Number of messages |
 | `send --rate` | 20 | Most messages sent per second |
 | `send --timeout` | 0.5 | Seconds to wait for each ACK |
@@ -693,3 +698,100 @@ python -m scripts.plot_trackb results/trackb/compare
 - If every ACK for the final message is lost, the sender reports failure even though the receiver delivered everything. No protocol can rule this out completely. The waiting time makes it unlikely, because all 6 attempts' ACKs would have to be lost.
 - Only one message is in flight at a time, so stop-and-wait sends at most one message per round trip. On a long link most of the time is spent waiting.
 - The timeout is fixed. A real protocol would adapt it to the measured round-trip time.
+
+## Enhancement: Go-Back-N Sliding Window
+
+This is the optional bonus enhancement, built on top of the required work: a sliding-window sender that keeps up to N messages in flight instead of one. Stop-and-wait, its evidence and its comparison are unchanged; Go-Back-N is a separate mode, `--mode gobackn`, with its own evidence and experiments.
+
+### How it works
+
+- **Sender.** It sends new messages while fewer than `--window` are unacknowledged and the rate limit allows, and it reads ACKs in every pause between sends. One timer runs for the oldest unacknowledged message, the *base*.
+- **Cumulative ACKs.** The receiver still delivers only the next expected message. In this mode every ACK is cumulative: the ACK for message k means messages 1 to k have all arrived. A later ACK therefore also covers an earlier ACK that was lost.
+- **Going back.** If the base's timer expires, the sender rewinds to the base and sends everything from there again, counting each resend as a retransmission. A message that arrives after a gap is discarded by the receiver, which re-ACKs the last message it delivered in order.
+- **Giving up.** After `--retries` timeouts in a row without the base moving, the sender stops and reports failure.
+- **Window 1.** With one message in flight, Go-Back-N behaves like stop-and-wait. The comparison uses this as a check.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Sending: base = next = 1
+    Sending --> Sending: room in the window, send message next, next + 1
+    Sending --> Waiting: window full or all sent
+    Waiting --> Sending: cumulative ACK k with k >= base, base = k + 1
+    Waiting --> Waiting: duplicate ACK (k < base), ignore it
+    Waiting --> Sending: timer expires with retries left, next = base (go back)
+    Waiting --> Failed: RETRIES timeouts in a row
+    Sending --> Done: ACK for the last message
+    Done --> [*]
+    Failed --> [*]
+```
+
+To try it in the live view, start terminal 1 with `python -m scripts.demo_net --run-id gbn --replace --drop-rule "routerB:type=DATA,message_id=gbn-demo3-5"`. Then run this in terminal 2:
+
+```bash
+python -m src.reliable send --name host1 --to host2 --mode gobackn --window 4 --count 10 --rate 100 --transfer-id demo3 --run-id gbn
+```
+
+```text
+18:07:02.030  routerB  DROPS DATA #5 on the link to routerD (forced rule type=DATA,message_id=gbn-demo3-5,skip=0,count=1)  [gbn-demo3-5]
+18:07:02.041  host2    discards DATA #6: waiting for #5, ACKs #4 again  [gbn-demo3-6]
+18:07:02.042  host1    ignores a duplicate ACK for #4: everything up to #4 is already acknowledged  [gbn-demo3-4]
+...
+18:07:02.531  host1    TIMEOUT: no ACK for #5 within 0.5 s; going back to resend 4 messages  [gbn-demo3-5]
+18:07:02.531  host1    RESENDS DATA #5 (attempt 2)  [gbn-demo3-5]
+18:07:02.532  host2    delivers DATA #5 to the application  [gbn-demo3-5]
+...
+18:07:02.590  host1    done: 10/10 acknowledged, 4 resends, 0.61 s
+```
+
+### Evidence
+
+```bash
+python -m scripts.run_trackb evidence --mode gobackn
+```
+
+These are five Go-Back-N transfers of 10 messages with a window of 4, each checked automatically. They use the same path, 20 ms delay, timeout and retries as the stop-and-wait evidence, at up to 100 messages per second so the window actually fills. Results are in `results/trackb/window-evidence/`.
+
+| Case | What happened | Result |
+|---|---|---|
+| No loss | 10/10 delivered once and in order, 0 retransmissions, 4 messages in flight at the peak, 0.15 s | PASS |
+| DATA 5 dropped once at routerB | The receiver discarded what arrived after the gap. The sender went back to 5 and resent the 4 messages in flight. 10/10 in order, no duplicates, 0.48 s | PASS |
+| ACK 3 dropped once at routerD | The next cumulative ACK covered it, so nothing was resent. 10/10 in order, 0.16 s | PASS |
+| Final ACK dropped once at routerD | The sender resent message 10, and the lingering receiver ACKed it again. 1 retransmission, 0.48 s | PASS |
+| Destination host down | Each of the 5 timeouts resent the window of 4. The sender gave up on message 1 after 20 retransmissions, in 1.81 s | PASS |
+
+### Comparison with stop-and-wait and best-effort
+
+```bash
+python -m scripts.run_trackb window
+python -m scripts.plot_window results/trackb/window
+```
+
+**Setup.** Exactly the Track B comparison's settings: the upper path, a 20 ms delay on routerB–routerD, 0% or 5% loss on that link, 50 messages at up to 50 per second, a 0.3 s timeout and 5 retries. Windows of 1, 2, 4 and 8, 3 runs each, seeds 201 to 224. Raw logs are in `results/trackb/window/<run-id>/`.
+
+| Condition | Delivered | Full sequence | Most in flight | Resends per run | Time to deliver, mean ± SD |
+|---|---|---|---|---|---|
+| Window 1, 0% loss | 100% | 3 of 3 | 1 | 0 | 2.29 ± 0.01 s |
+| Window 2, 0% loss | 100% | 3 of 3 | 2 | 0 | 1.13 ± 0.01 s |
+| Window 4, 0% loss | 100% | 3 of 3 | 3 | 0 | 1.10 ± 0.00 s |
+| Window 8, 0% loss | 100% | 3 of 3 | 3 | 0 | 1.10 ± 0.01 s |
+| Window 1, 5% loss | 100% | 3 of 3 | 1 | 4.3 | 3.59 ± 0.16 s |
+| Window 2, 5% loss | 100% | 3 of 3 | 2 | 4.7 | 1.91 ± 0.47 s |
+| Window 4, 5% loss | 100% | 3 of 3 | 4 | 6.7 | 1.61 ± 0.19 s |
+| Window 8, 5% loss | 100% | 3 of 3 | 8 | 25.7 | 2.24 ± 1.02 s |
+
+![Go-Back-N window comparison](results/trackb/window/window.png)
+
+**Reading the results.**
+
+- **Window 1 behaves like stop-and-wait:** 2.29 s and 3.59 s, against 2.22 s and 3.40 s for stop-and-wait. The gap at 5% loss comes from different random drops (4.3 resends per run against 4.0).
+- **A window of 2 or more halves the time without loss.** It drops from 2.29 s to 1.10 s, within 10% of best-effort's 1.00 s, and every message still arrives once and in order.
+- **Why the gain stops at 3.** One round trip (about 44 ms) at one send every 20 ms covers about 2.2 messages; this is the bandwidth-delay product. That is why at most 3 messages were ever in flight without loss, and why windows of 4 and 8 are no faster.
+- **Under 5% loss, a window of 4 is fastest at 1.61 s,** less than half of stop-and-wait's 3.40 s. Lost ACKs cost almost nothing, because a later cumulative ACK covers them.
+- **Larger windows waste resends.** While the base waits out its 0.3 s timeout, a window of 8 lets 8 messages pile up behind it, and going back resends all of them. Those resends cross the lossy link again and can be lost too. Two of the three runs at window 8 resent 36 and 41 messages; the third lost no DATA and finished in 1.07 s. This waste is Go-Back-N's known weakness, and what Selective Repeat avoids by resending only the lost message.
+
+### Limitations
+
+- Go-Back-N resends the whole window after one loss. Selective Repeat, with receiver-side buffering, would resend only what was lost.
+- The timeout is fixed (0.3 s). An adaptive timeout, estimated from measured round trips, would recover from a loss sooner.
+- With 3 runs per condition, results under loss vary widely, especially at window 8.
+- There is no receiver-advertised flow control: the window is a fixed sender setting.
