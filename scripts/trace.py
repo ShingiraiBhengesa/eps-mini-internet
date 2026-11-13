@@ -146,7 +146,7 @@ def describe(record):
     if event == "echo_payload_mismatch":
         return "ignores an ECHO whose payload doesn't match the probe"
     if event == "dropped_unexpected_echo":
-        return "ignores an ECHO for a different probe"
+        return "ignores an ECHO for a probe it is no longer waiting for (a late or stray reply)"
     if event == "dropped_wrong_destination":
         return f"ignores {kind} addressed to {record.get('dst')}"
     if event == "dropped_malformed":

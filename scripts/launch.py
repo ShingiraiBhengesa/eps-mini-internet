@@ -220,7 +220,8 @@ class Network:
 
 
 def probe_command(python, config_path, run_id, log_dir, sender, receiver,
-                  count, interval, timeout, payload=None):
+                  count, interval, timeout, payload=None, hop_limit=None):
+    """The command that probes `receiver` (any device name) from `sender`."""
     command = [
         python, "-m", "src.host", "--name", sender, "--probe", receiver,
         "--count", str(count), "--interval", str(interval),
@@ -230,6 +231,8 @@ def probe_command(python, config_path, run_id, log_dir, sender, receiver,
     ]
     if payload is not None:
         command += ["--payload", payload]
+    if hop_limit is not None:
+        command += ["--hop-limit", str(hop_limit)]
     return command
 
 
