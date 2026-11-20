@@ -84,7 +84,8 @@ class WindowReceiver(Receiver):
             if not pending:
                 entry["last_consumed"] = self.clock()
 
-            pending.append(seq)
+            # Retain the original packet for accurate delivery logging.
+            pending.append((seq, packet))
             state.expected += 1
             highest = seq
 
@@ -175,12 +176,13 @@ class WindowReceiver(Receiver):
                 continue
 
             for _ in range(count):
-                seq = pending.popleft()
+                seq, buffered_packet = pending.popleft()
                 state.delivered.append(seq)
 
+                # Log each delivery using its original DATA packet.
                 self.log(
                     "delivered",
-                    entry["last_packet"],
+                    buffered_packet,
                     seq=seq,
                     mode="gobackn",
                 )

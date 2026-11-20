@@ -401,3 +401,42 @@ def test_flow_control_through_real_routers(
         event["event"] == "delivered"
         for event in receiver_events
     )
+
+def test_buffered_deliveries_keep_original_message_ids():
+    """Verify each buffered delivery uses its original message ID."""
+
+    class PacketLogHost(FakeHost):
+        """Record the packet ID associated with each delivery."""
+
+        def __init__(self):
+            super().__init__()
+            self.deliveries = []
+
+        def log(self, device, event, packet=None, **details):
+            super().log(device, event, packet, **details)
+
+            if event == "delivered":
+                self.deliveries.append(
+                    (details["seq"], packet["message_id"])
+                )
+
+    host = PacketLogHost()
+    clock = Clock()
+
+    receiver = WindowReceiver(
+        host,
+        buffer_size=2,
+        consume_interval=0.1,
+        clock=clock,
+    )
+
+    receiver.on_data(data(1))
+    receiver.on_data(data(2))
+
+    clock.advance(0.21)
+    receiver.tick()
+
+    assert host.deliveries == [
+        (1, "gbn-test-1"),
+        (2, "gbn-test-2"),
+    ]
