@@ -364,7 +364,7 @@ def run_transfer(
     linger=3.0, observe=None, transfer_id=None, start_receiver=True, window=None,
     link=None, loss=None, delay_ms=None, drop_rules=(), condition=None,
     sender="host1", receiver="host2", python=sys.executable,
-    flow_control=False, buffer_size=2, consume_interval=0.15,
+    flow_control=False, buffer_size=2, consume_interval=0.15, bounded_receiver=False,
 ):
     """Run one Track B transfer and return (run_dir, run metadata).
 
@@ -376,10 +376,10 @@ def run_transfer(
     if flow_control and mode != "gobackn":
         raise ValueError("flow control requires Go-Back-N mode")
 
-    if flow_control and buffer_size < 1:
+    if (flow_control or bounded_receiver) and buffer_size < 1:
         raise ValueError("buffer_size must be at least 1")
 
-    if flow_control and consume_interval <= 0:
+    if (flow_control or bounded_receiver) and consume_interval <= 0:
         raise ValueError("consume_interval must be positive")
 
     transfer_id = transfer_id or run_id
@@ -388,7 +388,7 @@ def run_transfer(
     if observe is not None:
         receiver_args += ["--observe", str(observe)]
 
-    if flow_control:
+    if flow_control or bounded_receiver:
         receiver_args += [
             "--flow-control",
             "--buffer-size", str(buffer_size),
@@ -416,8 +416,9 @@ def run_transfer(
         "observe_s": observe,
         "transfer_id": transfer_id,
         "flow_control": flow_control,
-        "buffer_size": buffer_size if flow_control else None,
-        "consume_interval": consume_interval if flow_control else None,
+        "bounded_receiver": flow_control or bounded_receiver,
+        "buffer_size": buffer_size if flow_control or bounded_receiver else None,
+        "consume_interval": consume_interval if flow_control or bounded_receiver else None,
     })
     command = [
         python, "-m", "src.reliable", "send", "--name", sender, "--to", receiver,
