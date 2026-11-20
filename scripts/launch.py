@@ -202,7 +202,14 @@ class Network:
 
             path = Path(errors.name)
             if path.exists() and path.stat().st_size == 0:
-                path.unlink()
+                for attempt in range(10):
+                    try:
+                        path.unlink()
+                        break
+                    except PermissionError:
+                        if attempt == 9:
+                            raise
+                        time.sleep(0.1)
 
         self.procs = {}
 
