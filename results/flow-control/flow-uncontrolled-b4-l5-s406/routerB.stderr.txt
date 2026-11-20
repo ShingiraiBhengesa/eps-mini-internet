@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 201, in _run_module_as_main
+  File "<frozen runpy>", line 87, in _run_code
+  File "C:\Users\preet\csci4550\eps-mini-internet\src\router.py", line 167, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "C:\Users\preet\csci4550\eps-mini-internet\src\router.py", line 157, in main
+    router.serve()
+    ~~~~~~~~~~~~^^
+  File "C:\Users\preet\csci4550\eps-mini-internet\src\router.py", line 91, in serve
+    packet, sender = receive_packet(self.sock)
+                     ~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "C:\Users\preet\csci4550\eps-mini-internet\src\transport.py", line 20, in receive_packet
+    data, sender = sock.recvfrom(MAX_PACKET_SIZE + 1)
+                   ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host

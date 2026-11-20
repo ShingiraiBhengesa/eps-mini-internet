@@ -1,0 +1,107 @@
+{
+  "run_id": "flow-controlled-b1-l5-s404",
+  "seed": 404,
+  "router_seeds": {
+    "routerA": 4040,
+    "routerB": 4041,
+    "routerC": 4042,
+    "routerD": 4043
+  },
+  "base_config": "config\\topology_upper.json",
+  "link": "routerB-routerD",
+  "loss": 0.05,
+  "delay_ms": 20,
+  "links": [
+    {
+      "endpoints": [
+        "host1",
+        "routerA"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerB"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerA",
+        "routerC"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerB",
+        "routerD"
+      ],
+      "loss": 0.05,
+      "delay_ms": 20
+    },
+    {
+      "endpoints": [
+        "routerC",
+        "routerD"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    },
+    {
+      "endpoints": [
+        "routerD",
+        "host2"
+      ],
+      "loss": 0.0,
+      "delay_ms": 0
+    }
+  ],
+  "paths": {
+    "forward": [
+      "host1",
+      "routerA",
+      "routerB",
+      "routerD",
+      "host2"
+    ],
+    "return": [
+      "host2",
+      "routerD",
+      "routerB",
+      "routerA",
+      "host1"
+    ]
+  },
+  "drop_rules": {},
+  "code_version": "core-checkpoint-29-g8d0e6d1-dirty",
+  "python": "3.15.1",
+  "kind": "transfer",
+  "condition": "controlled, buffer 1, loss 5%",
+  "sender": "host1",
+  "receiver": "host2",
+  "receiver_started": true,
+  "mode": "gobackn",
+  "window": 4,
+  "count": 15,
+  "rate": 50.0,
+  "timeout_s": 0.5,
+  "retries": 5,
+  "linger_s": 3.0,
+  "observe_s": null,
+  "transfer_id": "flow-controlled-b1-l5-s404",
+  "flow_control": true,
+  "bounded_receiver": true,
+  "buffer_size": 1,
+  "consume_interval": 0.15,
+  "started_at": "2026-11-20T06:27:12.158918+00:00",
+  "receiver_exited_by_itself": true,
+  "finished_at": "2026-11-20T06:27:20.670871+00:00",
+  "duration_s": 8.512,
+  "sender_exit_code": 0,
+  "sender_summary": "go-back-n (window 4): 15/15 messages acknowledged, 0 retransmissions, 4.40 s"
+}

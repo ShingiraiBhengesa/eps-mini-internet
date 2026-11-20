@@ -1,0 +1,1 @@
+{"run_id":"flow-controlled-b1-l0-s401","device":"routerC","timestamp":1795155937.9761539,"event":"started","endpoint":"127.0.0.1:5103","seed":4012,"links":[{"neighbor":"routerA","loss":0.0,"delay_ms":0},{"neighbor":"routerD","loss":0.0,"delay_ms":0}],"drop_rules":[]}

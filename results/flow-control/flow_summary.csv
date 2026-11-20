@@ -1,0 +1,9 @@
+condition,runs,delivery_fraction,complete_runs,mean_elapsed_s,mean_retransmissions,max_in_flight,zero_window_events,window_probes,buffer_full_events
+"controlled, buffer 1, loss 0%",3,1.0,3,3.637,0,1,45,0,0
+"controlled, buffer 1, loss 5%",3,1.0,3,4.07,0.33,1,42,2,0
+"controlled, buffer 4, loss 0%",3,1.0,3,1.808,0,3,36,0,0
+"controlled, buffer 4, loss 5%",3,1.0,3,1.869,0,3,32,0,0
+"uncontrolled, buffer 1, loss 0%",3,1.0,3,8.091,50,4,0,0,42
+"uncontrolled, buffer 1, loss 5%",3,1.0,3,8.72,52.67,4,0,0,40
+"uncontrolled, buffer 4, loss 0%",3,1.0,3,2.127,11,4,0,0,9
+"uncontrolled, buffer 4, loss 5%",3,1.0,3,2.109,11.33,4,0,0,7

@@ -1,0 +1,25 @@
+run_id,condition,loss,messages,delivered,complete_sequence,sender_success,retransmissions,elapsed_s,max_in_flight,window_updates,zero_window_events,window_probes,buffer_full_events
+flow-controlled-b1-l0-s401,"controlled, buffer 1, loss 0%",0.0,15,15,True,True,0,3.635,1,29,15,0,0
+flow-controlled-b1-l0-s402,"controlled, buffer 1, loss 0%",0.0,15,15,True,True,0,3.643,1,29,15,0,0
+flow-controlled-b1-l0-s403,"controlled, buffer 1, loss 0%",0.0,15,15,True,True,0,3.634,1,29,15,0,0
+flow-controlled-b1-l5-s404,"controlled, buffer 1, loss 5%",0.05,15,15,True,True,0,4.402,1,28,14,2,0
+flow-controlled-b1-l5-s405,"controlled, buffer 1, loss 5%",0.05,15,15,True,True,0,3.638,1,29,15,0,0
+flow-controlled-b1-l5-s406,"controlled, buffer 1, loss 5%",0.05,15,15,True,True,1,4.169,1,27,13,0,0
+flow-controlled-b4-l0-s401,"controlled, buffer 4, loss 0%",0.0,15,15,True,True,0,1.791,3,26,12,0,0
+flow-controlled-b4-l0-s402,"controlled, buffer 4, loss 0%",0.0,15,15,True,True,0,1.789,3,26,12,0,0
+flow-controlled-b4-l0-s403,"controlled, buffer 4, loss 0%",0.0,15,15,True,True,0,1.844,3,26,12,0,0
+flow-controlled-b4-l5-s404,"controlled, buffer 4, loss 5%",0.05,15,15,True,True,0,1.969,3,25,10,0,0
+flow-controlled-b4-l5-s405,"controlled, buffer 4, loss 5%",0.05,15,15,True,True,0,1.842,3,26,12,0,0
+flow-controlled-b4-l5-s406,"controlled, buffer 4, loss 5%",0.05,15,15,True,True,0,1.796,3,24,10,0,0
+flow-uncontrolled-b1-l0-s401,"uncontrolled, buffer 1, loss 0%",0.0,15,15,True,True,50,8.004,4,0,0,0,14
+flow-uncontrolled-b1-l0-s402,"uncontrolled, buffer 1, loss 0%",0.0,15,15,True,True,50,8.111,4,0,0,0,14
+flow-uncontrolled-b1-l0-s403,"uncontrolled, buffer 1, loss 0%",0.0,15,15,True,True,50,8.158,4,0,0,0,14
+flow-uncontrolled-b1-l5-s404,"uncontrolled, buffer 1, loss 5%",0.05,15,15,True,True,54,8.643,4,0,0,0,13
+flow-uncontrolled-b1-l5-s405,"uncontrolled, buffer 1, loss 5%",0.05,15,15,True,True,53,8.85,4,0,0,0,14
+flow-uncontrolled-b1-l5-s406,"uncontrolled, buffer 1, loss 5%",0.05,15,15,True,True,51,8.667,4,0,0,0,13
+flow-uncontrolled-b4-l0-s401,"uncontrolled, buffer 4, loss 0%",0.0,15,15,True,True,11,2.138,4,0,0,0,3
+flow-uncontrolled-b4-l0-s402,"uncontrolled, buffer 4, loss 0%",0.0,15,15,True,True,11,2.133,4,0,0,0,3
+flow-uncontrolled-b4-l0-s403,"uncontrolled, buffer 4, loss 0%",0.0,15,15,True,True,11,2.11,4,0,0,0,3
+flow-uncontrolled-b4-l5-s404,"uncontrolled, buffer 4, loss 5%",0.05,15,15,True,True,12,2.052,4,0,0,0,2
+flow-uncontrolled-b4-l5-s405,"uncontrolled, buffer 4, loss 5%",0.05,15,15,True,True,11,2.061,4,0,0,0,3
+flow-uncontrolled-b4-l5-s406,"uncontrolled, buffer 4, loss 5%",0.05,15,15,True,True,11,2.215,4,0,0,0,2

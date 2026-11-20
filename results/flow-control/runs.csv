@@ -1,0 +1,25 @@
+run_id,condition,seed,mode,window,link,loss,delay_ms,messages,delivered,delivered_fraction,full_sequence,in_order,duplicates_at_receiver,out_of_order_discards,max_in_flight,data_sent,retransmissions,sender_success,failed_at,sender_elapsed_s,delivery_time_s,data_drops,ack_drops,receiver_stop,sender_exit_code,complete
+flow-controlled-b1-l0-s401,"controlled, buffer 1, loss 0%",401,gobackn,4,routerB-routerD,0.0,20,15,15,1.0,True,True,0,0,1,15,0,True,,3.635,3.795,0,0,linger_over,0,True
+flow-controlled-b1-l0-s402,"controlled, buffer 1, loss 0%",402,gobackn,4,routerB-routerD,0.0,20,15,15,1.0,True,True,0,0,1,15,0,True,,3.643,3.8,0,0,linger_over,0,True
+flow-controlled-b1-l0-s403,"controlled, buffer 1, loss 0%",403,gobackn,4,routerB-routerD,0.0,20,15,15,1.0,True,True,0,0,1,15,0,True,,3.634,3.791,0,0,linger_over,0,True
+flow-controlled-b1-l5-s404,"controlled, buffer 1, loss 5%",404,gobackn,4,routerB-routerD,0.05,20,15,15,1.0,True,True,2,0,1,17,0,True,,4.402,4.543,0,3,linger_over,0,True
+flow-controlled-b1-l5-s405,"controlled, buffer 1, loss 5%",405,gobackn,4,routerB-routerD,0.05,20,15,15,1.0,True,True,0,0,1,15,0,True,,3.638,3.779,0,0,linger_over,0,True
+flow-controlled-b1-l5-s406,"controlled, buffer 1, loss 5%",406,gobackn,4,routerB-routerD,0.05,20,15,15,1.0,True,True,0,0,1,16,1,True,,4.169,4.328,1,3,linger_over,0,True
+flow-controlled-b4-l0-s401,"controlled, buffer 4, loss 0%",401,gobackn,4,routerB-routerD,0.0,20,15,15,1.0,True,True,0,0,3,15,0,True,,1.791,2.327,0,0,,0,True
+flow-controlled-b4-l0-s402,"controlled, buffer 4, loss 0%",402,gobackn,4,routerB-routerD,0.0,20,15,15,1.0,True,True,0,0,3,15,0,True,,1.789,2.325,0,0,,0,True
+flow-controlled-b4-l0-s403,"controlled, buffer 4, loss 0%",403,gobackn,4,routerB-routerD,0.0,20,15,15,1.0,True,True,0,0,3,15,0,True,,1.844,2.32,0,0,,0,True
+flow-controlled-b4-l5-s404,"controlled, buffer 4, loss 5%",404,gobackn,4,routerB-routerD,0.05,20,15,15,1.0,True,True,0,0,3,15,0,True,,1.969,2.316,0,3,linger_over,0,True
+flow-controlled-b4-l5-s405,"controlled, buffer 4, loss 5%",405,gobackn,4,routerB-routerD,0.05,20,15,15,1.0,True,True,0,0,3,15,0,True,,1.842,2.306,0,0,,0,True
+flow-controlled-b4-l5-s406,"controlled, buffer 4, loss 5%",406,gobackn,4,routerB-routerD,0.05,20,15,15,1.0,True,True,0,0,3,15,0,True,,1.796,2.323,0,2,,0,True
+flow-uncontrolled-b1-l0-s401,"uncontrolled, buffer 1, loss 0%",401,gobackn,4,routerB-routerD,0.0,20,15,15,1.0,True,True,0,36,4,65,50,True,,8.004,8.163,0,0,linger_over,0,True
+flow-uncontrolled-b1-l0-s402,"uncontrolled, buffer 1, loss 0%",402,gobackn,4,routerB-routerD,0.0,20,15,15,1.0,True,True,0,36,4,65,50,True,,8.111,8.265,0,0,linger_over,0,True
+flow-uncontrolled-b1-l0-s403,"uncontrolled, buffer 1, loss 0%",403,gobackn,4,routerB-routerD,0.0,20,15,15,1.0,True,True,0,36,4,65,50,True,,8.158,8.317,0,0,linger_over,0,True
+flow-uncontrolled-b1-l5-s404,"uncontrolled, buffer 1, loss 5%",404,gobackn,4,routerB-routerD,0.05,20,15,15,1.0,True,True,0,38,4,69,54,True,,8.643,8.799,3,5,linger_over,0,True
+flow-uncontrolled-b1-l5-s405,"uncontrolled, buffer 1, loss 5%",405,gobackn,4,routerB-routerD,0.05,20,15,15,1.0,True,True,0,36,4,68,53,True,,8.85,8.816,3,5,linger_over,0,True
+flow-uncontrolled-b1-l5-s406,"uncontrolled, buffer 1, loss 5%",406,gobackn,4,routerB-routerD,0.05,20,15,15,1.0,True,True,0,36,4,66,51,True,,8.667,8.824,2,4,linger_over,0,True
+flow-uncontrolled-b4-l0-s401,"uncontrolled, buffer 4, loss 0%",401,gobackn,4,routerB-routerD,0.0,20,15,15,1.0,True,True,0,8,4,26,11,True,,2.138,2.549,0,0,linger_over,0,True
+flow-uncontrolled-b4-l0-s402,"uncontrolled, buffer 4, loss 0%",402,gobackn,4,routerB-routerD,0.0,20,15,15,1.0,True,True,0,8,4,26,11,True,,2.133,2.544,0,0,linger_over,0,True
+flow-uncontrolled-b4-l0-s403,"uncontrolled, buffer 4, loss 0%",403,gobackn,4,routerB-routerD,0.0,20,15,15,1.0,True,True,0,8,4,26,11,True,,2.11,2.522,0,0,linger_over,0,True
+flow-uncontrolled-b4-l5-s404,"uncontrolled, buffer 4, loss 5%",404,gobackn,4,routerB-routerD,0.05,20,15,15,1.0,True,True,0,9,4,27,12,True,,2.052,2.588,1,5,,0,True
+flow-uncontrolled-b4-l5-s405,"uncontrolled, buffer 4, loss 5%",405,gobackn,4,routerB-routerD,0.05,20,15,15,1.0,True,True,0,7,4,26,11,True,,2.061,2.483,1,0,linger_over,0,True
+flow-uncontrolled-b4-l5-s406,"uncontrolled, buffer 4, loss 5%",406,gobackn,4,routerB-routerD,0.05,20,15,15,1.0,True,True,0,8,4,26,11,True,,2.215,2.447,1,3,linger_over,0,True
