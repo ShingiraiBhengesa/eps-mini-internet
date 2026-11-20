@@ -1,3 +1,4 @@
+
 # eps-mini-internet
 # Mini Internet Project
 
@@ -59,7 +60,7 @@ If you see `No module named 'scripts'` or `No module named 'src'`, you skipped t
 python -m pytest -q
 ```
 
-Expected: `221 passed` in a few seconds.
+Expected: `231 passed`.
 
 ### 5. Watch the network run
 
@@ -461,6 +462,7 @@ python -m scripts.make_routes
 | `python -m scripts.run_trackb evidence --mode gobackn` | The enhancement's five fixed cases, each checked automatically |
 | `python -m scripts.run_trackb window` | Go-Back-N at windows 1, 2, 4 and 8 (24 runs) |
 | `python -m scripts.plot_window <folder>` | Draws `window.png` from the window results |
+| `python -m scripts.run_flow_control` | Compares Go-Back-N with and without receiver-advertised flow control (24 runs) |
 
 Example single run:
 
@@ -530,6 +532,7 @@ The tests cover:
 - The live demo view and the packet trace
 - Go-Back-N (the enhancement): cumulative ACKs, discarding messages after a gap, going back after a lost DATA message, a lost ACK covered by a later one, a lost final ACK, giving up, never exceeding the window, reading ACKs between paced sends, and a full transfer through real routers
 - Track B: in-order delivery, duplicates ACKed again but not delivered twice, the receiver's waiting time, best-effort mode, resending a lost DATA message or after a lost final ACK, giving up after the retry limit, ignoring late or duplicate ACKs, sending rate, and a full transfer through real routers with forced drops
+- Receiver-advertised flow control: bounded buffering, window advertisements, zero-window recovery, lost updates, retry limits, input validation and complete transfers through real routers
 
 ## Module Interfaces
 
@@ -543,10 +546,12 @@ The tests cover:
 - `src/run_log.py`: Records network events as JSON lines, to the terminal and to per-device files.
 - `src/shutdown.py`: Stops a process cleanly on Ctrl-C or SIGTERM.
 - `src/reliable.py`: Track B: the stop-and-wait sender and receiver, the best-effort sender, the Go-Back-N sender (the enhancement), and their command line.
+- `src/flow_control.py`: Bounded receiver buffers, advertised-window ACKs, sender-side flow control and zero-window recovery.
 - `scripts/make_routes.py`: Generates the upper, lower and loop configs.
 - `scripts/launch.py`, `scripts/run_baseline.py`, `scripts/metrics.py`, `scripts/plot_results.py`: Experiment tools.
 - `scripts/demo_net.py`, `scripts/trace.py`: Live demo view and packet tracing.
 - `scripts/run_trackb.py`, `scripts/plot_trackb.py`, `scripts/plot_window.py`: Track B and enhancement evidence, comparison runs and charts.
+- `scripts/run_flow_control.py`: Reproducible flow-control experiments and CSV summaries.
 
 ## Track B: Reliable Transfer
 
@@ -797,4 +802,79 @@ python -m scripts.plot_window results/trackb/window
 - Go-Back-N resends the whole window after one loss. Selective Repeat, with receiver-side buffering, would resend only what was lost.
 - The timeout is fixed (0.3 s). An adaptive timeout, estimated from measured round trips, would recover from a loss sooner.
 - With 3 runs per condition, results under loss vary widely, especially at window 8.
-- There is no receiver-advertised flow control: the window is a fixed sender setting.
+- The original Go-Back-N sender uses a fixed window. Receiver-advertised flow control is available separately through `--flow-control`.
+
+## Enhancement: Receiver-Advertised Flow Control
+
+Receiver-advertised flow control extends Go-Back-N by allowing the receiver to report its available buffer capacity. The sender adjusts its transmission window to avoid sending new data when the receiver cannot accept it. This enhancement is implemented in `src/flow_control.py` and is optional, leaving the original protocols unchanged.
+
+### How it works
+
+- **Receiver:** Buffers incoming messages up to `--buffer-size` and simulates application consumption every `--consume-interval` seconds. Cumulative ACKs advertise the number of free buffer slots (`rwnd`). New messages are rejected when the buffer is full, and updated advertisements are sent as space becomes available.
+- **Sender:** Initially sends one message to learn the available capacity, then limits transmission using its configured window and the advertised receiver window. It pauses when `rwnd` is zero and resumes when space becomes available.
+- **Lost updates:** ACK advertisements contain a version number to distinguish newer updates. If a window-opening advertisement is lost, the sender probes by resending previously acknowledged DATA, which the receiver recognizes as a duplicate. Probing stops after a bounded number of unsuccessful attempts.
+
+For example, `{"rwnd":2,"version":3}` advertises two free buffer slots. The existing six-field packet format remains unchanged because the advertisement is carried in the ACK payload.
+
+### Commands
+
+Start the four routers as described in [By hand](#by-hand-six-terminals), then run the receiver:
+
+```bash
+python -m src.reliable receive --name host2 --expect 20 --flow-control --buffer-size 2 --consume-interval 0.15
+```
+
+Run the sender in another terminal:
+
+```bash
+python -m src.reliable send --name host1 --to host2 --mode gobackn --window 4 --count 20 --flow-control
+```
+
+| Option | Default | Meaning |
+|---|---|---|
+| `send --flow-control` | off | Enable receiver-advertised flow control with Go-Back-N |
+| `receive --flow-control` | off | Enable bounded buffering and window advertisements |
+| `receive --buffer-size` | 2 | Receiver buffer capacity in messages |
+| `receive --consume-interval` | 0.15 | Seconds between application consumption events |
+
+Both sides must enable flow control. Omitting the option uses the original Go-Back-N behavior.
+
+### Experimental Comparison
+
+```bash
+python -m scripts.run_flow_control
+```
+
+The experiment compares Go-Back-N with and without sender-side flow control using the same bounded receiver in both configurations.
+
+**Setup.** Upper routing path with 20 ms one-way delay on routerB-routerD, 0% or 5% link loss, receiver buffers of 1 or 4 messages, and application consumption every 0.15 s. Each transfer sends 15 messages at up to 50 messages per second, with a sender window of 4, a 0.5 s timeout and 5 retries. Three repetitions per condition produce 24 runs.
+
+**Results** (`results/flow-control/flow_summary.csv`). Times represent average sender completion time.
+
+| Flow control | Buffer | Loss | Complete runs | Retransmissions per run | Mean time |
+|---|---:|---:|---:|---:|---:|
+| Disabled | 1 | 0% | 3/3 | 50.00 | 8.091 s |
+| Enabled | 1 | 0% | 3/3 | 0.00 | 3.637 s |
+| Disabled | 1 | 5% | 3/3 | 52.67 | 8.720 s |
+| Enabled | 1 | 5% | 3/3 | 0.33 | 4.070 s |
+| Disabled | 4 | 0% | 3/3 | 11.00 | 2.127 s |
+| Enabled | 4 | 0% | 3/3 | 0.00 | 1.808 s |
+| Disabled | 4 | 5% | 3/3 | 11.33 | 2.109 s |
+| Enabled | 4 | 5% | 3/3 | 0.00 | 1.869 s |
+
+All 24 transfers delivered their complete message sequences in order.
+
+**Reading the results.**
+
+- **Buffer protection.** Without flow control, the one-message receiver buffer caused 42 buffer-full events across three runs at 0% loss. No buffer-full events occurred with flow control enabled.
+- **Fewer retransmissions.** At 0% loss with a one-message buffer, flow control reduced average retransmissions from 50 to zero. This shows that receiver limitations can cause retransmissions even without network loss.
+- **Faster transfers.** Under the same conditions, average sender time decreased from 8.091 s to 3.637 s. The improvement was smaller with a four-message buffer because the receiver could accept more data.
+- **Loss recovery.** All transfers completed under 5% loss. Two zero-window probes were recorded across the three controlled runs with a one-message buffer, demonstrating recovery when window updates were lost.
+
+### Evidence and Limitations
+
+Automated tests in `tests/test_flow_control.py` verify buffer capacity, window advertisements, zero-window recovery, lost updates, bounded failure, input validation and end-to-end operation through the four-router network. The complete test suite passed all 231 tests.
+
+The experimental evidence is in `results/flow-control/`, including `flow_runs.csv`, `flow_summary.csv`, standard Track B metrics and individual run logs.
+
+Application consumption is simulated at a fixed rate, retransmission timeouts are fixed, and only two receiver buffer sizes were evaluated. With three repetitions per condition, these results demonstrate performance under the tested conditions rather than a universal advantage.
