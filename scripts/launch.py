@@ -1,3 +1,4 @@
+
 """Run one experiment: start the network, run the sender, stop everything.
 
 Example (20 probes over the upper path with 5% loss and 20 ms delay on
@@ -363,6 +364,7 @@ def run_transfer(
     linger=3.0, observe=None, transfer_id=None, start_receiver=True, window=None,
     link=None, loss=None, delay_ms=None, drop_rules=(), condition=None,
     sender="host1", receiver="host2", python=sys.executable,
+    flow_control=False, buffer_size=2, consume_interval=0.15,
 ):
     """Run one Track B transfer and return (run_dir, run metadata).
 
@@ -371,11 +373,27 @@ def run_transfer(
     after the first one. start_receiver=False leaves the destination host
     down, to test an unreachable destination.
     """
+    if flow_control and mode != "gobackn":
+        raise ValueError("flow control requires Go-Back-N mode")
+
+    if flow_control and buffer_size < 1:
+        raise ValueError("buffer_size must be at least 1")
+
+    if flow_control and consume_interval <= 0:
+        raise ValueError("consume_interval must be positive")
+
     transfer_id = transfer_id or run_id
     receiver_args = ["-m", "src.reliable", "receive", "--name", receiver,
                      "--expect", str(count), "--linger", str(linger)]
     if observe is not None:
         receiver_args += ["--observe", str(observe)]
+
+    if flow_control:
+        receiver_args += [
+            "--flow-control",
+            "--buffer-size", str(buffer_size),
+            "--consume-interval", str(consume_interval),
+        ]
 
     run_dir, network, meta = prepare_run(
         base_config, run_id, seed, out_dir, link, loss, delay_ms, drop_rules,
@@ -397,6 +415,9 @@ def run_transfer(
         "linger_s": linger,
         "observe_s": observe,
         "transfer_id": transfer_id,
+        "flow_control": flow_control,
+        "buffer_size": buffer_size if flow_control else None,
+        "consume_interval": consume_interval if flow_control else None,
     })
     command = [
         python, "-m", "src.reliable", "send", "--name", sender, "--to", receiver,
@@ -408,7 +429,16 @@ def run_transfer(
     ]
     if mode == "gobackn" and window is not None:
         command += ["--window", str(window)]
+
+    if flow_control:
+        command += ["--flow-control"]
+
     worst_case = count * (1.0 / rate + timeout * (retries + 1))
+
+    # Account for application consumption and zero-window recovery.
+    if flow_control:
+        worst_case += count * consume_interval + 20 * timeout
+
     return execute_run(run_dir, network, meta, command, timeout=worst_case + 30,
                        responder_wait=linger + (observe or 0) + 2)
 

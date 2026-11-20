@@ -1,3 +1,4 @@
+
 """Track B: reliable transfer with stop-and-wait, plus a best-effort baseline
 and, as the optional enhancement, a Go-Back-N sliding window.
 
@@ -582,6 +583,11 @@ def build_parser():
                       help="resends allowed per message before giving up (stop-and-wait)")
     send.add_argument("--window", type=int, default=DEFAULT_WINDOW,
                       help="most messages in flight at once (gobackn, default %(default)s)")
+    send.add_argument(
+        "--flow-control",
+        action="store_true",
+        help="enable receiver-advertised flow control for Go-Back-N",
+    )
     send.add_argument("--transfer-id", type=transfer_id_arg,
                       help="name used in message IDs (default: random)")
 
@@ -595,6 +601,23 @@ def build_parser():
                               "message (default %(default)s)")
     receive.add_argument("--observe", type=positive_float,
                          help="stop this many seconds after the transfer's first message")
+    receive.add_argument(
+        "--flow-control",
+        action="store_true",
+        help="enable receiver-advertised flow control",
+    )
+    receive.add_argument(
+        "--buffer-size",
+        type=int,
+        default=2,
+        help="receiver buffer capacity in messages",
+    )
+    receive.add_argument(
+        "--consume-interval",
+        type=positive_float,
+        default=0.15,
+        help="seconds needed to consume one buffered message",
+    )
     return parser
 
 
@@ -643,6 +666,20 @@ def main(argv=None):
         print("error: --linger cannot be negative", file=sys.stderr)
         return 2
 
+    if args.command == "send" and args.flow_control and args.mode != "gobackn":
+        print(
+            "error: --flow-control requires --mode gobackn",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.command == "receive" and args.flow_control and args.buffer_size < 1:
+        print(
+            "error: --buffer-size must be at least 1",
+            file=sys.stderr,
+        )
+        return 2
+
     log = create_logger(args.run_id, path=log_path(args.log_dir, args.run_id, args.name))
     try:
         config = load_config(args.config)
@@ -664,16 +701,41 @@ def main(argv=None):
                 sender = StopAndWaitSender(host, args.to, args.count, transfer,
                                            args.timeout, args.retries, args.rate)
             elif args.mode == "gobackn":
-                sender = GoBackNSender(host, args.to, args.count, transfer, args.window,
-                                       args.timeout, args.retries, args.rate)
+                if args.flow_control:
+                    from .flow_control import FlowControlledSender
+                    sender_class = FlowControlledSender
+                else:
+                    sender_class = GoBackNSender
+
+                sender = sender_class(
+                    host,
+                    args.to,
+                    args.count,
+                    transfer,
+                    args.window,
+                    args.timeout,
+                    args.retries,
+                    args.rate,
+                )
             else:
                 sender = BestEffortSender(host, args.to, args.count, transfer, args.rate)
             summary = sender.run()
             print(describe_send(summary), file=sys.stderr)
             return 1 if summary["success"] is False else 0
 
+        if args.flow_control:
+            from .flow_control import WindowReceiver
+
+            host.receiver = WindowReceiver(
+                host,
+                buffer_size=args.buffer_size,
+                consume_interval=args.consume_interval,
+            )
+
         receiver = host.receiver
-        receiver.expect, receiver.linger, receiver.observe = args.expect, args.linger, args.observe
+        receiver.expect = args.expect
+        receiver.linger = args.linger
+        receiver.observe = args.observe
         host.log_start("receive")
         reason = None
         try:
@@ -684,6 +746,10 @@ def main(argv=None):
                     if reply is not None:
                         host.log(host.name, "dropped_unexpected_ack"
                                  if reply["type"] == "ACK" else "dropped_unexpected_echo", reply)
+                # Free application buffer space and advertise window updates.
+                if args.flow_control:
+                    receiver.tick()
+
                 reason = receiver.finished()
         except KeyboardInterrupt:
             reason = "stopped"

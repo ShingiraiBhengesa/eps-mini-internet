@@ -307,3 +307,97 @@ def test_zero_window_failure_is_bounded():
     assert result["success"] is False
     assert result["failed_at"] == 2
     assert result["window_probes"] == 2
+
+
+def test_flow_control_requires_go_back_n(capsys):
+    """Reject flow control with incompatible transfer modes."""
+    from src.reliable import main
+
+    result = main([
+        "send",
+        "--name", "host1",
+        "--to", "host2",
+        "--mode", "stopwait",
+        "--flow-control",
+    ])
+
+    assert result == 2
+    assert "requires --mode gobackn" in capsys.readouterr().err
+
+
+def test_invalid_receiver_buffer_size(capsys):
+    """Reject receiver buffers that cannot hold any messages."""
+    from src.reliable import main
+
+    result = main([
+        "receive",
+        "--name", "host2",
+        "--flow-control",
+        "--buffer-size", "0",
+    ])
+
+    assert result == 2
+    assert "buffer-size must be at least 1" in capsys.readouterr().err
+
+
+def test_flow_control_through_real_routers(
+    tmp_path, upper_config_on_free_ports
+):
+    """Verify flow control through the complete four-router network."""
+    import json
+
+    from scripts.launch import run_transfer
+    from scripts.metrics import run_metrics
+
+    run_dir, meta = run_transfer(
+        upper_config_on_free_ports,
+        "flow-control-e2e",
+        10,
+        tmp_path / "runs",
+        mode="gobackn",
+        count=5,
+        rate=30,
+        timeout=0.5,
+        retries=5,
+        window=4,
+        linger=0.3,
+        flow_control=True,
+        buffer_size=1,
+        consume_interval=0.1,
+    )
+
+    metrics = run_metrics(run_dir)
+
+    assert meta["sender_exit_code"] == 0
+    assert meta["receiver_exited_by_itself"] is True
+    assert meta["flow_control"] is True
+
+    assert metrics["delivered"] == 5
+    assert metrics["full_sequence"] is True
+    assert metrics["in_order"] is True
+    assert metrics["sender_success"] is True
+
+    def events(name):
+        path = run_dir / f"{name}.jsonl"
+        return [
+            json.loads(line)
+            for line in path.read_text().splitlines()
+        ]
+
+    sender_events = events("host1")
+    receiver_events = events("host2")
+
+    assert any(
+        event["event"] == "window_updated"
+        for event in sender_events
+    )
+
+    assert any(
+        event["event"] == "window_advertised"
+        for event in receiver_events
+    )
+
+    assert any(
+        event["event"] == "delivered"
+        for event in receiver_events
+    )
