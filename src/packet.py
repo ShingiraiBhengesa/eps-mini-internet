@@ -1,5 +1,5 @@
-
 import json
+import zlib
 
 MAX_PACKET_SIZE = 1200
 MAX_ADDRESS_LENGTH = 32
@@ -22,14 +22,32 @@ class PacketError(ValueError):
     """Raised when a packet is invalid."""
 
 
+def calculate_checksum(packet: dict) -> int:
+    """Calculate a CRC32 checksum using the packet contents."""
+    return zlib.crc32(_serialize(packet)) & 0xFFFFFFFF
+
+
 def encode_packet(packet: dict) -> bytes:
-    """Validate and serialize a packet."""
+    """Validate, attach a checksum, and serialize a packet."""
     validate_packet(packet)
-    return _serialize(packet)
+
+    # Create a copy so the original packet is not modified.
+    packet_with_checksum = dict(packet)
+
+    # Calculate and attach the checksum before transmission.
+    packet_with_checksum["checksum"] = calculate_checksum(packet)
+
+    data = _serialize(packet_with_checksum)
+
+    # Ensure the packet still meets the size limit with the checksum.
+    if len(data) > MAX_PACKET_SIZE:
+        raise PacketError("Packet with checksum exceeds 1200 bytes")
+
+    return data
 
 
 def decode_packet(data: bytes) -> dict:
-    """Decode and validate bytes received over UDP."""
+    """Decode, verify checksum, and validate bytes received over UDP."""
     if not isinstance(data, bytes):
         raise PacketError("Packet must be bytes")
 
@@ -43,6 +61,25 @@ def decode_packet(data: bytes) -> dict:
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise PacketError("Invalid JSON packet") from exc
+
+    if not isinstance(packet, dict):
+        raise PacketError("Packet must be a JSON object")
+
+    # Extract and remove the checksum from the received packet.
+    received_checksum = packet.pop("checksum", None)
+
+    if (
+        type(received_checksum) is not int
+        or not 0 <= received_checksum <= 0xFFFFFFFF
+    ):
+        raise PacketError("Missing or invalid checksum")
+
+    # Recalculate the checksum using the received packet contents.
+    expected_checksum = calculate_checksum(packet)
+
+    # Reject the packet if corruption is detected.
+    if received_checksum != expected_checksum:
+        raise PacketError("Checksum mismatch: corrupted packet")
 
     validate_packet(packet)
     return packet
@@ -93,6 +130,8 @@ def _serialize(packet: dict) -> bytes:
             packet,
             separators=(",", ":"),
             ensure_ascii=True,
+            # Ensure consistent field ordering for checksum calculation.
+            sort_keys=True,
         ).encode("utf-8")
     except (TypeError, ValueError) as exc:
         raise PacketError("Packet cannot be serialized") from exc
