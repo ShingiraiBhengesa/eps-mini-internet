@@ -1,5 +1,5 @@
-
 import socket
+import json
 
 from .packet import (
     MAX_PACKET_SIZE,
@@ -9,9 +9,36 @@ from .packet import (
 )
 
 
-def send_packet(sock, endpoint, packet):
+def corrupt_packet(data):
+    """Modify a serialized packet without recalculating its checksum."""
+    packet = json.loads(data.decode("utf-8"))
+
+    # Corrupt the payload while preserving the original checksum.
+    payload = packet["payload"]
+
+    if payload:
+        replacement = "X" if payload[0] != "X" else "Y"
+        packet["payload"] = replacement + payload[1:]
+    else:
+        # ACK packets normally have an empty payload.
+        packet["payload"] = "X"
+
+    return json.dumps(
+        packet,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def send_packet(sock, endpoint, packet, corrupt=False):
     """Send a validated packet to a configured neighbor."""
     data = encode_packet(packet)
+
+    # Inject corruption AFTER the checksum has been calculated.
+    if corrupt:
+        data = corrupt_packet(data)
+
     sock.sendto(data, endpoint)
 
 

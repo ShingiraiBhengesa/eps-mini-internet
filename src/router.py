@@ -1,9 +1,8 @@
-
 import argparse
 import socket
 import sys
 
-from .conditions import DropRule, LinkScheduler
+from .conditions import DropRule, CorruptRule, LinkScheduler
 from .config import ConfigError, get_endpoint, load_config
 from .forwarding_checks import ForwardingError, plan_forward
 from .packet import PacketError
@@ -13,7 +12,10 @@ from .transport import create_udp_socket, receive_packet
 
 
 class Router:
-    def __init__(self, config, name, sock=None, log=None, seed=0, drop_rules=None):
+    def __init__(
+        self, config, name, sock=None, log=None,
+        seed=0, drop_rules=None, corrupt_rules=None
+    ):
         device = config["devices"].get(name)
 
         if device is None or device["role"] != "router":
@@ -21,10 +23,14 @@ class Router:
 
         self.config = config
         self.name = name
+
         self.sock = sock if sock is not None else create_udp_socket(
             *get_endpoint(config, name)
         )
-        self.log = log if log is not None else create_logger("default")
+
+        self.log = (
+            log if log is not None else create_logger("default")
+        )
 
         self.scheduler = LinkScheduler(
             config,
@@ -32,7 +38,8 @@ class Router:
             self.sock,
             seed=seed,
             log=self.log,
-            drop_rules=drop_rules
+            drop_rules=drop_rules,
+            corrupt_rules=corrupt_rules
         )
 
     def handle(self, packet, sender):
@@ -51,7 +58,10 @@ class Router:
                 sender
             )
         except ForwardingError as exc:
-            self.log(self.name, "drop", packet, reason=str(exc))
+            self.log(
+                self.name, "drop", packet,
+                reason=str(exc)
+            )
             return False
 
         self.log(
@@ -64,15 +74,23 @@ class Router:
         return self.scheduler.enqueue(next_hop, forwarded)
 
     def log_start(self):
-        """Record everything needed to reproduce this router's behavior."""
+        """Record everything needed to reproduce router behavior."""
         host, port = self.sock.getsockname()[:2]
+
         self.log(
             self.name,
             "started",
             endpoint=f"{host}:{port}",
             seed=self.scheduler.seed,
             links=self.scheduler.link_settings(),
-            drop_rules=[rule.describe() for rule in self.scheduler.drop_rules],
+            drop_rules=[
+                rule.describe()
+                for rule in self.scheduler.drop_rules
+            ],
+            corrupt_rules=[
+                rule.describe()
+                for rule in self.scheduler.corrupt_rules
+            ],
         )
 
     def serve(self, stop=None, poll_interval=0.1):
@@ -85,6 +103,7 @@ class Router:
                 0.001,
                 self.scheduler.next_timeout(poll_interval)
             )
+
             self.sock.settimeout(timeout)
 
             try:
@@ -114,18 +133,30 @@ def drop_rule_arg(text):
         raise argparse.ArgumentTypeError(str(exc)) from None
 
 
+def corrupt_rule_arg(text):
+    try:
+        return CorruptRule.parse(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Run a mini-internet router.")
+    parser = argparse.ArgumentParser(
+        description="Run a mini-internet router."
+    )
+
     parser.add_argument("--name", required=True)
     parser.add_argument("--config", default="config/topology.json")
     parser.add_argument("--run-id", type=run_id_arg, default="default")
     parser.add_argument("--seed", type=int, default=0)
+
     parser.add_argument(
         "--log-dir",
         default=DEFAULT_LOG_DIR,
         help="write this router's log to LOG_DIR/RUN_ID/NAME.jsonl "
              "(also printed to the terminal)",
     )
+
     parser.add_argument(
         "--drop-rule",
         type=drop_rule_arg,
@@ -135,20 +166,39 @@ def main(argv=None):
         help="drop matching packets this router sends, e.g. "
              "'type=PROBE,skip=1' drops the second PROBE once; repeatable",
     )
+
+    # New command-line argument for corruption injection.
+    parser.add_argument(
+        "--corrupt-rule",
+        type=corrupt_rule_arg,
+        action="append",
+        default=[],
+        metavar="RULE",
+        help="corrupt matching packets this router sends, e.g. "
+             "'type=DATA,count=1' corrupts the first DATA packet; repeatable",
+    )
+
     args = parser.parse_args(argv)
 
     try:
         config = load_config(args.config)
+
         router = Router(
             config,
             args.name,
             log=create_logger(
                 args.run_id,
-                path=log_path(args.log_dir, args.run_id, args.name),
+                path=log_path(
+                    args.log_dir,
+                    args.run_id,
+                    args.name
+                ),
             ),
             seed=args.seed,
             drop_rules=args.drop_rule,
+            corrupt_rules=args.corrupt_rule,
         )
+
     except (ConfigError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -165,3 +215,4 @@ def main(argv=None):
 if __name__ == "__main__":
     stop_on_signals()
     sys.exit(main())
+    
